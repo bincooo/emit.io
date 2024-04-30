@@ -33,6 +33,7 @@ type Emits struct {
 	conn     *websocket.Conn
 	ctx      context.Context
 	em       map[string]func(j JoinCompleted) interface{}
+	Err      error
 }
 
 func New(ctx context.Context, coupler interface{}) (e *Emits, err error) {
@@ -68,10 +69,17 @@ func (e *Emits) Do() error {
 	}
 
 	if e.conn != nil {
-		return e.doConn()
+		return e.warpE(e.doConn())
 	} else {
-		return e.doResponse()
+		return e.warpE(e.doResponse())
 	}
+}
+
+func (e *Emits) warpE(err error) error {
+	if e.Err != nil {
+		return e.Err
+	}
+	return err
 }
 
 func (e *Emits) doConn() error {
