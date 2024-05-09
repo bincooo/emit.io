@@ -33,7 +33,8 @@ type Emits struct {
 	conn     *websocket.Conn
 	ctx      context.Context
 	em       map[string]func(j JoinCompleted) interface{}
-	Err      error
+	err      error
+	close    bool
 }
 
 func New(ctx context.Context, coupler interface{}) (e *Emits, err error) {
@@ -63,6 +64,14 @@ func (e *Emits) Event(eventId string, funcCall func(j JoinCompleted) interface{}
 	e.em[eventId] = funcCall
 }
 
+func (e *Emits) Error(err error) {
+	e.err = err
+}
+
+func (e *Emits) Cancel() {
+	e.close = true
+}
+
 func (e *Emits) Do() error {
 	if e.conn == nil && e.response == nil {
 		panic("'coupler' is nil")
@@ -76,8 +85,8 @@ func (e *Emits) Do() error {
 }
 
 func (e *Emits) warpE(err error) error {
-	if e.Err != nil {
-		return e.Err
+	if e.err != nil {
+		return e.err
 	}
 	return err
 }
@@ -88,6 +97,10 @@ func (e *Emits) doConn() error {
 		case <-e.ctx.Done():
 			return e.ctx.Err()
 		default:
+			if e.close {
+				return nil
+			}
+
 			_, data, err := e.conn.ReadMessage()
 			if err != nil {
 				return err
@@ -160,6 +173,10 @@ func (e *Emits) doResponse() error {
 		case <-e.ctx.Done():
 			return e.ctx.Err()
 		default:
+			if e.close {
+				return nil
+			}
+
 			if !scanner.Scan() {
 				return nil
 			}
