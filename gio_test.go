@@ -2,7 +2,6 @@ package emits
 
 import (
 	"context"
-	"github.com/bincooo/gio.emits/common"
 	"net/http"
 	"testing"
 	"time"
@@ -13,7 +12,7 @@ const (
 	userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0"
 )
 
-func TestGio1(t *testing.T) {
+func TestClaude3Haiku20240307(t *testing.T) {
 	model := "claude-3-haiku-20240307"
 	query := "hi ~"
 
@@ -34,7 +33,7 @@ func TestGio1(t *testing.T) {
 		},
 	}
 
-	response, err := common.ClientBuilder().
+	response, err := ClientBuilder().
 		Proxies(proxies).
 		Context(ctx).
 		POST("https://chat.lmsys.org/queue/join").
@@ -48,17 +47,17 @@ func TestGio1(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	object, err := common.ToMap(response)
+	object, err := ToMap(response)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log(object)
-	cookie := common.GetCookies(response)
+	cookie := GetCookies(response)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	response, err = common.ClientBuilder().
+	response, err = ClientBuilder().
 		Proxies(proxies).
 		Context(ctx).
 		GET("https://chat.lmsys.org/queue/data").
@@ -74,19 +73,19 @@ func TestGio1(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	e, err := New(ctx, response)
+	e, err := NewGio(ctx, response)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	next := false
-	cookie = common.MergeCookies(cookie, common.GetCookies(response))
+	cookie = MergeCookies(cookie, GetCookies(response))
 
-	e.Event("*", func(j JoinCompleted) interface{} {
+	e.Event("*", func(j JoinEvent) interface{} {
 		t.Log(string(j.InitialBytes))
 		return nil
 	})
-	e.Event("process_completed", func(j JoinCompleted) interface{} {
+	e.Event("process_completed", func(j JoinEvent) interface{} {
 		if j.Success {
 			obj["fn_index"] = 42
 			obj["data"] = []interface{}{
@@ -99,7 +98,7 @@ func TestGio1(t *testing.T) {
 			ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
-			response, err = common.ClientBuilder().
+			response, err = ClientBuilder().
 				Proxies(proxies).
 				Context(ctx).
 				POST("https://chat.lmsys.org/queue/join").
@@ -114,12 +113,12 @@ func TestGio1(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			object, err = common.ToMap(response)
+			object, err = ToMap(response)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			cookie = common.MergeCookies(cookie, common.GetCookies(response))
+			cookie = MergeCookies(cookie, GetCookies(response))
 			t.Log(object)
 			next = true
 		}
@@ -137,7 +136,7 @@ func TestGio1(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	response, err = common.ClientBuilder().
+	response, err = ClientBuilder().
 		Proxies(proxies).
 		Context(ctx).
 		GET("https://chat.lmsys.org/queue/data").
@@ -153,12 +152,12 @@ func TestGio1(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
 
-	e, err = New(ctx, response)
+	e, err = NewGio(ctx, response)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	e.Event("*", func(j JoinCompleted) interface{} {
+	e.Event("*", func(j JoinEvent) interface{} {
 		t.Log(string(j.InitialBytes))
 		return nil
 	})
@@ -168,10 +167,10 @@ func TestGio1(t *testing.T) {
 	}
 }
 
-func TestGio2(t *testing.T) {
+func TestGioSDXL(t *testing.T) {
 	p := "1girl"
 	n := ""
-	conn, err := common.SocketBuilder().
+	conn, err := SocketBuilder().
 		Proxies(proxies).
 		URL("wss://tonyassi-text-to-image-sdxl.hf.space/queue/join").
 		Header("User-Agent", userAgent).
@@ -184,24 +183,24 @@ func TestGio2(t *testing.T) {
 	defer cancel()
 
 	hash := SessionHash()
-	e, err := New(ctx, conn)
+	e, err := NewGio(ctx, conn)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	e.Event("*", func(j JoinCompleted) interface{} {
+	e.Event("*", func(j JoinEvent) interface{} {
 		t.Log(string(j.InitialBytes))
 		return nil
 	})
 
-	e.Event("send_hash", func(j JoinCompleted) interface{} {
+	e.Event("send_hash", func(j JoinEvent) interface{} {
 		return map[string]interface{}{
 			"fn_index":     0,
 			"session_hash": hash,
 		}
 	})
 
-	e.Event("send_data", func(j JoinCompleted) interface{} {
+	e.Event("send_data", func(j JoinEvent) interface{} {
 		return map[string]interface{}{
 			"fn_index":     0,
 			"event_data":   nil,
@@ -212,7 +211,7 @@ func TestGio2(t *testing.T) {
 		}
 	})
 
-	e.Event("process_completed", func(j JoinCompleted) interface{} {
+	e.Event("process_completed", func(j JoinEvent) interface{} {
 		if j.Success {
 			t.Log("success.")
 		}

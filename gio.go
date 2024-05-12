@@ -11,7 +11,7 @@ import (
 	"net/http"
 )
 
-type JoinCompleted struct {
+type JoinEvent struct {
 	Msg     string      `json:"msg"`
 	EventId string      `json:"event_id"`
 	Success bool        `json:"success"`
@@ -28,23 +28,23 @@ type joinOutput struct {
 	Data []interface{} `json:"data"`
 }
 
-type Emits struct {
+type GioEmits struct {
 	response *http.Response
 	conn     *websocket.Conn
 	ctx      context.Context
-	em       map[string]func(j JoinCompleted) interface{}
+	em       map[string]func(j JoinEvent) interface{}
 	err      error
 	close    bool
 }
 
-func New(ctx context.Context, coupler interface{}) (e *Emits, err error) {
+func NewGio(ctx context.Context, coupler interface{}) (e *GioEmits, err error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	e = &Emits{
+	e = &GioEmits{
 		ctx: ctx,
-		em:  map[string]func(j JoinCompleted) interface{}{
+		em:  map[string]func(j JoinEvent) interface{}{
 			//
 		},
 	}
@@ -60,21 +60,25 @@ func New(ctx context.Context, coupler interface{}) (e *Emits, err error) {
 	return
 }
 
-func (e *Emits) Event(eventId string, funcCall func(j JoinCompleted) interface{}) {
+// 注册事件
+func (e *GioEmits) Event(eventId string, funcCall func(j JoinEvent) interface{}) {
 	e.em[eventId] = funcCall
 }
 
-func (e *Emits) Error(err error) {
+// 异常设置，并终止事件
+func (e *GioEmits) Failed(err error) {
 	e.err = err
+	e.Cancel()
 }
 
-func (e *Emits) Cancel() {
+// 终止事件
+func (e *GioEmits) Cancel() {
 	e.close = true
 }
 
-func (e *Emits) Do() error {
+func (e *GioEmits) Do() error {
 	if e.conn == nil && e.response == nil {
-		panic("'coupler' is nil")
+		panic("'coupler' is nil, please provide a valid 'coupler' value")
 	}
 
 	if e.conn != nil {
@@ -84,14 +88,27 @@ func (e *Emits) Do() error {
 	}
 }
 
-func (e *Emits) warpE(err error) error {
+// 异步执行
+func (e *GioEmits) DoAsync() chan error {
+	if e.conn == nil && e.response == nil {
+		panic("'coupler' is nil, please provide a valid 'coupler' value")
+	}
+
+	err := make(chan error, 1)
+	go func() {
+		err <- e.Do()
+	}()
+	return err
+}
+
+func (e *GioEmits) warpE(err error) error {
 	if e.err != nil {
 		return e.err
 	}
 	return err
 }
 
-func (e *Emits) doConn() error {
+func (e *GioEmits) doConn() error {
 	for {
 		select {
 		case <-e.ctx.Done():
@@ -106,7 +123,7 @@ func (e *Emits) doConn() error {
 				return err
 			}
 
-			var j JoinCompleted
+			var j JoinEvent
 			err = json.Unmarshal(data, &j)
 			if err != nil {
 				return err
@@ -150,7 +167,7 @@ func (e *Emits) doConn() error {
 	}
 }
 
-func (e *Emits) doResponse() error {
+func (e *GioEmits) doResponse() error {
 	scanner := bufio.NewScanner(e.response.Body)
 	scanner.Split(func(data []byte, eof bool) (advance int, token []byte, err error) {
 		if eof && len(data) == 0 {
@@ -187,7 +204,7 @@ func (e *Emits) doResponse() error {
 			}
 			data = data[6:]
 
-			var j JoinCompleted
+			var j JoinEvent
 			j.InitialBytes = []byte(data)
 
 			err := json.Unmarshal(j.InitialBytes, &j)
@@ -210,7 +227,7 @@ func (e *Emits) doResponse() error {
 	}
 }
 
-func SessionHash() string {
+func GioHash() string {
 	bin := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
 	binL := len(bin)
 	var buf bytes.Buffer

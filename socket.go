@@ -1,4 +1,4 @@
-package common
+package emits
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-type S struct {
+type Conn struct {
 	url     string
 	proxies string
 	headers map[string]string
@@ -21,61 +21,61 @@ type S struct {
 	err     error
 }
 
-func SocketBuilder() *S {
-	return &S{
+func SocketBuilder() Conn {
+	return Conn{
 		query:   make([]string, 0),
 		headers: make(map[string]string),
 	}
 }
 
-func (s *S) URL(url string) *S {
-	s.url = url
-	return s
+func (conn *Conn) URL(url string) *Conn {
+	conn.url = url
+	return conn
 }
 
-func (s *S) Proxies(proxies string) *S {
-	s.proxies = proxies
-	return s
+func (conn *Conn) Proxies(proxies string) *Conn {
+	conn.proxies = proxies
+	return conn
 }
 
-func (s *S) Header(key, value string) *S {
-	s.headers[key] = value
-	return s
+func (conn *Conn) Header(key, value string) *Conn {
+	conn.headers[key] = value
+	return conn
 }
 
-func (s *S) Query(key, value string) *S {
-	s.query = append(s.query, fmt.Sprintf("%s=%s", key, value))
-	return s
+func (conn *Conn) Query(key, value string) *Conn {
+	conn.query = append(conn.query, fmt.Sprintf("%s=%s", key, value))
+	return conn
 }
 
-func (s *S) Do() (*websocket.Conn, *http.Response, error) {
-	if s.err != nil {
-		return nil, nil, s.err
+func (conn *Conn) Do() (*websocket.Conn, *http.Response, error) {
+	if conn.err != nil {
+		return nil, nil, conn.err
 	}
 
-	if s.url == "" {
+	if conn.url == "" {
 		return nil, nil, errors.New("url cannot be empty, please execute func URL(url string)")
 	}
 
 	query := ""
-	if len(s.query) > 0 {
+	if len(conn.query) > 0 {
 		var slice []string
-		for _, value := range s.query {
+		for _, value := range conn.query {
 			slice = append(slice, value)
 		}
 		query = "?" + strings.Join(slice, "&")
 	}
 
 	h := http.Header{}
-	for k, v := range s.headers {
+	for k, v := range conn.headers {
 		h.Add(k, v)
 	}
 
-	return socket(s.proxies, s.url+query, h)
+	return socket(conn.proxies, conn.url+query, h)
 }
 
-func (s *S) DoWith(status int) (*websocket.Conn, error) {
-	conn, response, err := s.Do()
+func (conn *Conn) DoWith(status int) (*websocket.Conn, error) {
+	c, response, err := conn.Do()
 	if err != nil {
 		return nil, err
 	}
@@ -84,10 +84,10 @@ func (s *S) DoWith(status int) (*websocket.Conn, error) {
 		return nil, errors.New(response.Status)
 	}
 
-	return conn, nil
+	return c, nil
 }
 
-func socket(proxies, urlStr string, header http.Header) (*websocket.Conn, *http.Response, error) {
+func socket(proxies, u string, header http.Header) (*websocket.Conn, *http.Response, error) {
 	dialer := websocket.DefaultDialer
 	if proxies != "" {
 		pu, err := url.Parse(proxies)
@@ -116,5 +116,5 @@ func socket(proxies, urlStr string, header http.Header) (*websocket.Conn, *http.
 		}
 	}
 
-	return dialer.Dial(urlStr, header)
+	return dialer.Dial(u, header)
 }

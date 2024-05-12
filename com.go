@@ -1,4 +1,4 @@
-package common
+package emits
 
 import (
 	"math/rand"
@@ -13,14 +13,14 @@ func RandIP() string {
 	ip2Int := func(ip string) int {
 		slice := strings.Split(ip, ".")
 		result := 0
-		atoi, _ := strconv.Atoi(slice[0])
-		result += atoi << 24
-		atoi, _ = strconv.Atoi(slice[1])
-		result += atoi << 16
-		atoi, _ = strconv.Atoi(slice[2])
-		result += atoi << 8
-		atoi, _ = strconv.Atoi(slice[2])
-		result += atoi
+		i, _ := strconv.Atoi(slice[0])
+		result += i << 24
+		i, _ = strconv.Atoi(slice[1])
+		result += i << 16
+		i, _ = strconv.Atoi(slice[2])
+		result += i << 8
+		i, _ = strconv.Atoi(slice[2])
+		result += i
 		return result
 	}
 

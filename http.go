@@ -1,4 +1,4 @@
-package common
+package emits
 
 import (
 	"bytes"
@@ -15,7 +15,7 @@ import (
 	"strings"
 )
 
-type R struct {
+type Client struct {
 	url     string
 	method  string
 	proxies string
@@ -26,88 +26,88 @@ type R struct {
 	ctx     context.Context
 }
 
-func ClientBuilder() *R {
-	return &R{
+func ClientBuilder() Client {
+	return Client{
 		method:  http.MethodGet,
 		query:   make([]string, 0),
 		headers: make(map[string]string),
 	}
 }
 
-func (r *R) URL(url string) *R {
-	r.url = url
-	return r
+func (c *Client) URL(url string) *Client {
+	c.url = url
+	return c
 }
 
-func (r *R) Method(method string) *R {
-	r.method = method
-	return r
+func (c *Client) Method(method string) *Client {
+	c.method = method
+	return c
 }
 
-func (r *R) GET(url string) *R {
-	r.url = url
-	r.method = http.MethodGet
-	return r
+func (c *Client) GET(url string) *Client {
+	c.url = url
+	c.method = http.MethodGet
+	return c
 }
 
-func (r *R) POST(url string) *R {
-	r.url = url
-	r.method = http.MethodPost
-	return r
+func (c *Client) POST(url string) *Client {
+	c.url = url
+	c.method = http.MethodPost
+	return c
 }
 
-func (r *R) PUT(url string) *R {
-	r.url = url
-	r.method = http.MethodPut
-	return r
+func (c *Client) PUT(url string) *Client {
+	c.url = url
+	c.method = http.MethodPut
+	return c
 }
 
-func (r *R) DELETE(url string) *R {
-	r.url = url
-	r.method = http.MethodDelete
-	return r
+func (c *Client) DELETE(url string) *Client {
+	c.url = url
+	c.method = http.MethodDelete
+	return c
 }
 
-func (r *R) Proxies(proxies string) *R {
-	r.proxies = proxies
-	return r
+func (c *Client) Proxies(proxies string) *Client {
+	c.proxies = proxies
+	return c
 }
 
-func (r *R) Context(ctx context.Context) *R {
-	r.ctx = ctx
-	return r
+func (c *Client) Context(ctx context.Context) *Client {
+	c.ctx = ctx
+	return c
 }
 
-func (r *R) JHeader() *R {
-	r.headers["content-type"] = "application/json"
-	return r
+func (c *Client) JHeader() *Client {
+	c.headers["content-type"] = "application/json"
+	return c
 }
 
-func (r *R) Header(key, value string) *R {
-	r.headers[key] = value
-	return r
+func (c *Client) Header(key, value string) *Client {
+	c.headers[key] = value
+	return c
 }
 
-func (r *R) Query(key, value string) *R {
-	r.query = append(r.query, fmt.Sprintf("%s=%s", key, value))
-	return r
+func (c *Client) Query(key, value string) *Client {
+	c.query = append(c.query, fmt.Sprintf("%s=%s", key, value))
+	return c
 }
 
-func (r *R) Body(payload interface{}) *R {
-	if r.err != nil {
-		return r
+func (c *Client) Body(payload interface{}) *Client {
+	if c.err != nil {
+		return c
 	}
-	r.bytes, r.err = json.Marshal(payload)
-	return r
+	c.bytes, c.err = json.Marshal(payload)
+	return c
 }
 
-func (r *R) Bytes(data []byte) *R {
-	r.bytes = data
-	return r
+func (c *Client) Bytes(data []byte) *Client {
+	c.bytes = data
+	return c
 }
 
-func (r *R) DoWith(status int) (*http.Response, error) {
-	response, err := r.Do()
+func (c *Client) DoWith(status int) (*http.Response, error) {
+	response, err := c.Do()
 	if err != nil {
 		return nil, err
 	}
@@ -119,48 +119,43 @@ func (r *R) DoWith(status int) (*http.Response, error) {
 	return response, nil
 }
 
-func (r *R) Do() (*http.Response, error) {
-	if r.err != nil {
-		return nil, r.err
+func (c *Client) Do() (*http.Response, error) {
+	if c.err != nil {
+		return nil, c.err
 	}
 
-	if r.url == "" {
+	if c.url == "" {
 		return nil, errors.New("url cannot be empty, please execute func URL(url string)")
 	}
 
-	c, err := client(r.proxies)
+	cli, err := client(c.proxies)
 	if err != nil {
 		return nil, err
 	}
 
 	query := ""
-	if len(r.query) > 0 {
+	if len(c.query) > 0 {
 		var slice []string
-		for _, value := range r.query {
+		for _, value := range c.query {
 			slice = append(slice, value)
 		}
 		query = "?" + strings.Join(slice, "&")
 	}
-	request, err := http.NewRequest(r.method, r.url+query, bytes.NewBuffer(r.bytes))
+	request, err := http.NewRequest(c.method, c.url+query, bytes.NewBuffer(c.bytes))
 	if err != nil {
 		return nil, err
 	}
 
 	h := request.Header
-	for k, v := range r.headers {
+	for k, v := range c.headers {
 		h.Add(k, v)
 	}
 
-	if r.ctx != nil {
-		request = request.WithContext(r.ctx)
+	if c.ctx != nil {
+		request = request.WithContext(c.ctx)
 	}
 
-	response, err := c.Do(request)
-	if err != nil {
-		return nil, err
-	}
-
-	return response, nil
+	return cli.Do(request)
 }
 
 func client(proxies string) (*http.Client, error) {
