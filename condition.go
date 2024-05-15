@@ -2,32 +2,21 @@ package emits
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 )
 
 func IsJSON(response *http.Response) error {
-	if response == nil {
-		return errors.New("response is nil")
-	}
-	h := response.Header
-	t := h.Get("content-type")
-	if strings.Contains(t, "application/json") {
-		return nil
-	}
-	return errors.New("response is not 'application/json'")
+	return ist(response, "application/json")
 }
 
 func IsTEXT(response *http.Response) error {
-	if response == nil {
-		return errors.New("response is nil")
-	}
-	h := response.Header
-	t := h.Get("content-type")
-	if strings.Contains(t, "text/html") {
-		return nil
-	}
-	return errors.New("response is not 'text/html'")
+	return ist(response, "text/html")
+}
+
+func IsSTREAM(response *http.Response) error {
+	return ist(response, "text/event-stream")
 }
 
 func Status(status int) func(response *http.Response) error {
@@ -40,4 +29,15 @@ func Status(status int) func(response *http.Response) error {
 		}
 		return nil
 	}
+}
+
+func ist(response *http.Response, t string) error {
+	if response == nil {
+		return errors.New("response is nil")
+	}
+	h := response.Header
+	if strings.Contains(h.Get("content-type"), t) {
+		return nil
+	}
+	return fmt.Errorf("response is not '%s'", t)
 }
