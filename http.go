@@ -26,8 +26,8 @@ type Client struct {
 	ctx     context.Context
 }
 
-func ClientBuilder() Client {
-	return Client{
+func ClientBuilder() *Client {
+	return &Client{
 		method:  http.MethodGet,
 		query:   make([]string, 0),
 		headers: make(map[string]string),

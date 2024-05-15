@@ -19,7 +19,7 @@ func TestClaude3Haiku20240307(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	hash := SessionHash()
+	hash := GioHash()
 	obj := map[string]interface{}{
 		"event_data":   nil,
 		"fn_index":     41,
@@ -182,7 +182,7 @@ func TestGioSDXL(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
 
-	hash := SessionHash()
+	hash := GioHash()
 	e, err := NewGio(ctx, conn)
 	if err != nil {
 		t.Fatal(err)

@@ -21,8 +21,8 @@ type Conn struct {
 	err     error
 }
 
-func SocketBuilder() Conn {
-	return Conn{
+func SocketBuilder() *Conn {
+	return &Conn{
 		query:   make([]string, 0),
 		headers: make(map[string]string),
 	}
