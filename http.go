@@ -106,14 +106,21 @@ func (c *Client) Bytes(data []byte) *Client {
 	return c
 }
 
-func (c *Client) DoWith(status int) (*http.Response, error) {
+func (c *Client) DoS(status int) (*http.Response, error) {
+	return c.DoC(Status(status))
+}
+
+func (c *Client) DoC(funs ...func(*http.Response) error) (*http.Response, error) {
 	response, err := c.Do()
 	if err != nil {
-		return nil, err
+		return response, err
 	}
 
-	if response.StatusCode != status {
-		return nil, errors.New(response.Status)
+	for _, condition := range funs {
+		err = condition(response)
+		if err != nil {
+			return response, err
+		}
 	}
 
 	return response, nil
