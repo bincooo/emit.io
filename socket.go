@@ -48,6 +48,26 @@ func (conn *Conn) Query(key, value string) *Conn {
 	return conn
 }
 
+func (conn *Conn) DoS(status int) (*websocket.Conn, error) {
+	return conn.DoC(Status(status))
+}
+
+func (conn *Conn) DoC(funs ...func(*http.Response) error) (*websocket.Conn, error) {
+	c, response, err := conn.Do()
+	if err != nil {
+		return c, err
+	}
+
+	for _, condition := range funs {
+		err = condition(response)
+		if err != nil {
+			return c, err
+		}
+	}
+
+	return c, nil
+}
+
 func (conn *Conn) Do() (*websocket.Conn, *http.Response, error) {
 	if conn.err != nil {
 		return nil, nil, conn.err
@@ -72,19 +92,6 @@ func (conn *Conn) Do() (*websocket.Conn, *http.Response, error) {
 	}
 
 	return socket(conn.proxies, conn.url+query, h)
-}
-
-func (conn *Conn) DoWith(status int) (*websocket.Conn, error) {
-	c, response, err := conn.Do()
-	if err != nil {
-		return nil, err
-	}
-
-	if response.StatusCode != status {
-		return nil, errors.New(response.Status)
-	}
-
-	return c, nil
 }
 
 func socket(proxies, u string, header http.Header) (*websocket.Conn, *http.Response, error) {
