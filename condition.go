@@ -1,4 +1,4 @@
-package emits
+package emit
 
 import (
 	"errors"
