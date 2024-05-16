@@ -42,7 +42,7 @@ func TestClaude3Haiku20240307(t *testing.T) {
 		Header("User-Agent", userAgent).
 		JHeader().
 		Body(obj).
-		DoWith(http.StatusOK)
+		DoS(http.StatusOK)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestClaude3Haiku20240307(t *testing.T) {
 		Header("Referer", "https://chat.lmsys.org/").
 		Header("User-Agent", userAgent).
 		Header("Cookie", cookie).
-		DoWith(http.StatusOK)
+		DoS(http.StatusOK)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestClaude3Haiku20240307(t *testing.T) {
 				Header("Cookie", cookie).
 				JHeader().
 				Body(obj).
-				DoWith(http.StatusOK)
+				DoS(http.StatusOK)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -144,7 +144,7 @@ func TestClaude3Haiku20240307(t *testing.T) {
 		Header("Referer", "https://chat.lmsys.org/").
 		Header("User-Agent", userAgent).
 		Header("Cookie", cookie).
-		DoWith(http.StatusOK)
+		DoS(http.StatusOK)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +174,7 @@ func TestGioSDXL(t *testing.T) {
 		Proxies(proxies).
 		URL("wss://tonyassi-text-to-image-sdxl.hf.space/queue/join").
 		Header("User-Agent", userAgent).
-		DoWith(http.StatusSwitchingProtocols)
+		DoS(http.StatusSwitchingProtocols)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -8,36 +8,36 @@ import (
 )
 
 func IsJSON(response *http.Response) error {
-	return ist(response, "application/json")
+	return ist(response, "Json", "application/json")
 }
 
 func IsTEXT(response *http.Response) error {
-	return ist(response, "text/html")
+	return ist(response, "Text", "text/html")
 }
 
 func IsSTREAM(response *http.Response) error {
-	return ist(response, "text/event-stream")
+	return ist(response, "Stream", "text/event-stream")
 }
 
 func Status(status int) func(response *http.Response) error {
 	return func(response *http.Response) error {
 		if response == nil {
-			return errors.New("response is nil")
+			return Error{-1, "Status", errors.New("response is nil")}
 		}
 		if response.StatusCode != status {
-			return errors.New(response.Status)
+			return Error{response.StatusCode, "Status", errors.New(response.Status)}
 		}
 		return nil
 	}
 }
 
-func ist(response *http.Response, t string) error {
+func ist(response *http.Response, bus, t string) error {
 	if response == nil {
-		return errors.New("response is nil")
+		return Error{-1, bus, errors.New("response is nil")}
 	}
 	h := response.Header
 	if strings.Contains(h.Get("content-type"), t) {
 		return nil
 	}
-	return fmt.Errorf("response is not '%s'", t)
+	return Error{-1, bus, fmt.Errorf("response is not '%s'", t)}
 }

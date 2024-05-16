@@ -132,12 +132,16 @@ func (c *Client) Do() (*http.Response, error) {
 	}
 
 	if c.url == "" {
-		return nil, errors.New("url cannot be empty, please execute func URL(url string)")
+		return nil, Error{
+			Code: -1,
+			Bus:  "Do",
+			Err:  errors.New("url cannot be empty, please execute func URL(url string)"),
+		}
 	}
 
 	cli, err := client(c.proxies)
 	if err != nil {
-		return nil, err
+		return nil, Error{-1, "Do", err}
 	}
 
 	query := ""
@@ -150,7 +154,7 @@ func (c *Client) Do() (*http.Response, error) {
 	}
 	request, err := http.NewRequest(c.method, c.url+query, bytes.NewBuffer(c.bytes))
 	if err != nil {
-		return nil, err
+		return nil, Error{-1, "Do", err}
 	}
 
 	h := request.Header
@@ -162,7 +166,12 @@ func (c *Client) Do() (*http.Response, error) {
 		request = request.WithContext(c.ctx)
 	}
 
-	return cli.Do(request)
+	response, err := cli.Do(request)
+	if err != nil {
+		err = Error{-1, "Do", err}
+	}
+
+	return response, err
 }
 
 func client(proxies string) (*http.Client, error) {

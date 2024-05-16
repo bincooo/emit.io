@@ -70,11 +70,11 @@ func (conn *Conn) DoC(funs ...func(*http.Response) error) (*websocket.Conn, erro
 
 func (conn *Conn) Do() (*websocket.Conn, *http.Response, error) {
 	if conn.err != nil {
-		return nil, nil, conn.err
+		return nil, nil, Error{-1, "Do", conn.err}
 	}
 
 	if conn.url == "" {
-		return nil, nil, errors.New("url cannot be empty, please execute func URL(url string)")
+		return nil, nil, Error{-1, "Do", errors.New("url cannot be empty, please execute func URL(url string)")}
 	}
 
 	query := ""
@@ -91,7 +91,12 @@ func (conn *Conn) Do() (*websocket.Conn, *http.Response, error) {
 		h.Add(k, v)
 	}
 
-	return socket(conn.proxies, conn.url+query, h)
+	c, response, err := socket(conn.proxies, conn.url+query, h)
+	if err != nil {
+		err = Error{-1, "Do", err}
+	}
+
+	return c, response, err
 }
 
 func socket(proxies, u string, header http.Header) (*websocket.Conn, *http.Response, error) {
