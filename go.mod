@@ -1,4 +1,4 @@
-module github.com/bincooo/io.emits
+module github.com/bincooo/emit.io
 
 require (
 	github.com/RomiChan/websocket v1.4.3-0.20220227141055-9b2c6168c9c5
