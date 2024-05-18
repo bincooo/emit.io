@@ -19,7 +19,7 @@ func RandIP() string {
 		result += i << 16
 		i, _ = strconv.Atoi(slice[2])
 		result += i << 8
-		i, _ = strconv.Atoi(slice[2])
+		i, _ = strconv.Atoi(slice[3])
 		result += i
 		return result
 	}
@@ -31,7 +31,6 @@ func RandIP() string {
 		result += strconv.Itoa(num & 255)
 		return
 	}
-
 	randIndex := r.Intn(len(_range))
 	startIPInt := ip2Int(_range[randIndex][0])
 	endIPInt := ip2Int(_range[randIndex][1])
