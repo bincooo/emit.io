@@ -20,7 +20,7 @@ type Conn struct {
 	query   []string
 	err     error
 
-	jar *http.CookieJar
+	jar http.CookieJar
 }
 
 func SocketBuilder() *Conn {
@@ -40,7 +40,7 @@ func (conn *Conn) Proxies(proxies string) *Conn {
 	return conn
 }
 
-func (conn *Conn) CookieJar(jar *http.CookieJar) *Conn {
+func (conn *Conn) CookieJar(jar http.CookieJar) *Conn {
 	conn.jar = jar
 	return conn
 }
@@ -106,7 +106,7 @@ func (conn *Conn) Do() (*websocket.Conn, *http.Response, error) {
 	return c, response, err
 }
 
-func socket(proxies, u string, header http.Header, jar *http.CookieJar) (*websocket.Conn, *http.Response, error) {
+func socket(proxies, u string, header http.Header, jar http.CookieJar) (*websocket.Conn, *http.Response, error) {
 	dialer := websocket.DefaultDialer
 	if proxies != "" {
 		pu, err := url.Parse(proxies)
@@ -136,7 +136,7 @@ func socket(proxies, u string, header http.Header, jar *http.CookieJar) (*websoc
 	}
 
 	if jar != nil {
-		dialer.Jar = *jar
+		dialer.Jar = jar
 	}
 
 	return dialer.Dial(u, header)

@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"strings"
 )
@@ -25,7 +26,7 @@ type Client struct {
 	err     error
 	ctx     context.Context
 
-	jar *http.CookieJar
+	jar http.CookieJar
 }
 
 func ClientBuilder() *Client {
@@ -80,7 +81,7 @@ func (c *Client) Context(ctx context.Context) *Client {
 	return c
 }
 
-func (c *Client) CookieJar(jar *http.CookieJar) *Client {
+func (c *Client) CookieJar(jar *cookiejar.Jar) *Client {
 	c.jar = jar
 	return c
 }
@@ -161,7 +162,7 @@ func (c *Client) Do() (*http.Response, error) {
 	}
 
 	if c.jar != nil {
-		cli.Jar = *c.jar
+		cli.Jar = c.jar
 	}
 
 	request, err := http.NewRequest(c.method, c.url+query, bytes.NewBuffer(c.bytes))
