@@ -24,6 +24,8 @@ type Client struct {
 	bytes   []byte
 	err     error
 	ctx     context.Context
+
+	jar *http.CookieJar
 }
 
 func ClientBuilder() *Client {
@@ -75,6 +77,11 @@ func (c *Client) Proxies(proxies string) *Client {
 
 func (c *Client) Context(ctx context.Context) *Client {
 	c.ctx = ctx
+	return c
+}
+
+func (c *Client) CookieJar(jar *http.CookieJar) *Client {
+	c.jar = jar
 	return c
 }
 
@@ -152,6 +159,11 @@ func (c *Client) Do() (*http.Response, error) {
 		}
 		query = "?" + strings.Join(slice, "&")
 	}
+
+	if c.jar != nil {
+		cli.Jar = *c.jar
+	}
+
 	request, err := http.NewRequest(c.method, c.url+query, bytes.NewBuffer(c.bytes))
 	if err != nil {
 		return nil, Error{-1, "Do", err}

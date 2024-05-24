@@ -19,6 +19,8 @@ type Conn struct {
 	headers map[string]string
 	query   []string
 	err     error
+
+	jar *http.CookieJar
 }
 
 func SocketBuilder() *Conn {
@@ -35,6 +37,11 @@ func (conn *Conn) URL(url string) *Conn {
 
 func (conn *Conn) Proxies(proxies string) *Conn {
 	conn.proxies = proxies
+	return conn
+}
+
+func (conn *Conn) CookieJar(jar *http.CookieJar) *Conn {
+	conn.jar = jar
 	return conn
 }
 
@@ -91,7 +98,7 @@ func (conn *Conn) Do() (*websocket.Conn, *http.Response, error) {
 		h.Add(k, v)
 	}
 
-	c, response, err := socket(conn.proxies, conn.url+query, h)
+	c, response, err := socket(conn.proxies, conn.url+query, h, conn.jar)
 	if err != nil {
 		err = Error{-1, "Do", err}
 	}
@@ -99,7 +106,7 @@ func (conn *Conn) Do() (*websocket.Conn, *http.Response, error) {
 	return c, response, err
 }
 
-func socket(proxies, u string, header http.Header) (*websocket.Conn, *http.Response, error) {
+func socket(proxies, u string, header http.Header, jar *http.CookieJar) (*websocket.Conn, *http.Response, error) {
 	dialer := websocket.DefaultDialer
 	if proxies != "" {
 		pu, err := url.Parse(proxies)
@@ -126,6 +133,10 @@ func socket(proxies, u string, header http.Header) (*websocket.Conn, *http.Respo
 				HandshakeTimeout: 45 * time.Second,
 			}
 		}
+	}
+
+	if jar != nil {
+		dialer.Jar = *jar
 	}
 
 	return dialer.Dial(u, header)
