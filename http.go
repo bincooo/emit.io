@@ -11,7 +11,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/http/cookiejar"
 	"net/url"
 	"strings"
 )
@@ -81,7 +80,7 @@ func (c *Client) Context(ctx context.Context) *Client {
 	return c
 }
 
-func (c *Client) CookieJar(jar *cookiejar.Jar) *Client {
+func (c *Client) CookieJar(jar http.CookieJar) *Client {
 	c.jar = jar
 	return c
 }
