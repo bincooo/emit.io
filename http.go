@@ -310,3 +310,14 @@ func MergeCookies(sourceCookies, targetCookies string) string {
 
 	return strings.Join(buffer, "; ")
 }
+
+func TextResponse(response *http.Response) (value string) {
+	if response == nil {
+		return
+	}
+	bin, err := io.ReadAll(response.Body)
+	if err != nil {
+		return
+	}
+	return string(bin)
+}
