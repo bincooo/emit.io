@@ -7,12 +7,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/gospider007/ja3"
+	"github.com/gospider007/requests"
 	"golang.org/x/net/proxy"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type Client struct {
@@ -26,6 +30,7 @@ type Client struct {
 	ctx     context.Context
 	buffer  io.Reader
 	jar     http.CookieJar
+	ja3     string
 }
 
 func ClientBuilder() *Client {
@@ -100,6 +105,11 @@ func (c *Client) Query(key, value string) *Client {
 	return c
 }
 
+func (c *Client) Ja3(ja3 string) *Client {
+	c.ja3 = ja3
+	return c
+}
+
 func (c *Client) Body(payload interface{}) *Client {
 	if c.err != nil {
 		return c
@@ -151,6 +161,10 @@ func (c *Client) Do() (*http.Response, error) {
 		}
 	}
 
+	if c.ja3 != "" {
+		return c.doJ()
+	}
+
 	cli, err := client(c.proxies)
 	if err != nil {
 		return nil, Error{-1, "Do", err}
@@ -193,6 +207,98 @@ func (c *Client) Do() (*http.Response, error) {
 	}
 
 	return response, err
+}
+
+func (c *Client) doJ() (*http.Response, error) {
+	if c.err != nil {
+		return nil, c.err
+	}
+
+	if c.url == "" {
+		return nil, Error{
+			Code: -1,
+			Bus:  "Do",
+			Err:  errors.New("url cannot be empty, please execute func URL(url string)"),
+		}
+	}
+
+	if c.ctx == nil {
+		var cancel context.CancelFunc
+		c.ctx, cancel = context.WithTimeout(context.Background(), 300*time.Second)
+		defer cancel()
+	}
+
+	session, err := requests.NewClient(c.ctx)
+	if err != nil {
+		return nil, Error{-1, "Do", err}
+	}
+
+	err = session.SetProxy(c.proxies)
+	if err != nil {
+		return nil, Error{-1, "Do", err}
+	}
+
+	query := ""
+	if len(c.query) > 0 {
+		var slice []string
+		for _, value := range c.query {
+			slice = append(slice, value)
+		}
+		query = "?" + strings.Join(slice, "&")
+	}
+
+	if c.jar != nil {
+		var u *url.URL
+		if u, err = url.Parse(c.url); err != nil {
+			return nil, Error{-1, "Do", err}
+		}
+
+		if err = session.SetCookies(u, c.jar); err != nil {
+			return nil, Error{-1, "Do", err}
+		}
+	}
+
+	if c.buffer == nil {
+		c.buffer = bytes.NewBuffer(c.bytes)
+	}
+
+	h := requests.NewOrderMap()
+	for k, v := range c.headers {
+		h.Set(k, v)
+	}
+
+	ja3Spec, err := ja3.CreateSpecWithStr(c.ja3) //create ja3 spec with string
+	if err != nil {
+		return nil, Error{-1, "Do", err}
+	}
+
+	response, err := session.Request(c.ctx, c.method, c.url+query, requests.RequestOption{
+		Headers: h,
+		Ja3Spec: ja3Spec,
+		Body:    c.buffer,
+	})
+	if err != nil {
+		return nil, Error{-1, "Do", err}
+	}
+
+	var body io.ReadCloser
+	if response.IsStream() {
+		body = response.Conn()
+	} else {
+		body = io.NopCloser(bytes.NewBuffer(response.Content()))
+	}
+
+	protoMajor, _ := strconv.Atoi(response.Proto()[5:6])
+	r := http.Response{
+		Status:        response.Status(),
+		StatusCode:    response.StatusCode(),
+		Proto:         response.Proto(),
+		ProtoMajor:    protoMajor,
+		Header:        response.Headers(),
+		ContentLength: response.ContentLength(),
+		Body:          body,
+	}
+	return &r, err
 }
 
 func client(proxies string) (*http.Client, error) {

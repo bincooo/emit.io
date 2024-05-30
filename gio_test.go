@@ -2,14 +2,17 @@ package emit
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
 
 const (
-	proxies   = "http://127.0.0.1:7890"
-	userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0"
+	proxies     = "http://127.0.0.1:7890"
+	userAgent   = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0"
+	baseCookies = "_gid=GA1.2.68066840.1717017781; _ga_K6D24EE9ED=GS1.1.1717087813.23.1.1717088648.0.0.0; _gat_gtag_UA_156449732_1=1; _ga_R1FN4KJKJH=GS1.1.1717087813.37.1.1717088648.0.0.0; _ga=GA1.1.1320014795.1715641484"
 )
 
 func TestRandIP(t *testing.T) {
@@ -20,14 +23,13 @@ func TestClaude3Haiku20240307(t *testing.T) {
 	model := "claude-3-haiku-20240307"
 	query := "hi ~"
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()
 
 	hash := GioHash()
 	obj := map[string]interface{}{
-		"event_data":   nil,
-		"fn_index":     41,
-		"trigger_id":   93,
+		"fn_index":     44,
+		"trigger_id":   95,
 		"session_hash": hash,
 		"data": []interface{}{
 			nil,
@@ -37,6 +39,7 @@ func TestClaude3Haiku20240307(t *testing.T) {
 		},
 	}
 
+	cookies := fetchCookies(ctx, proxies)
 	response, err := ClientBuilder().
 		Proxies(proxies).
 		Context(ctx).
@@ -44,6 +47,7 @@ func TestClaude3Haiku20240307(t *testing.T) {
 		Header("Origin", "https://chat.lmsys.org").
 		Header("Referer", "https://chat.lmsys.org/").
 		Header("User-Agent", userAgent).
+		Header("cookie", cookies).
 		JHeader().
 		Body(obj).
 		DoS(http.StatusOK)
@@ -91,7 +95,7 @@ func TestClaude3Haiku20240307(t *testing.T) {
 	})
 	e.Event("process_completed", func(j JoinEvent) interface{} {
 		if j.Success {
-			obj["fn_index"] = 42
+			obj["fn_index"] = 45
 			obj["data"] = []interface{}{
 				nil,
 				0.7,
@@ -225,4 +229,51 @@ func TestGioSDXL(t *testing.T) {
 	if err = e.Do(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func fetchCookies(ctx context.Context, proxies string) (cookies string) {
+	retry := 3
+label:
+	if retry <= 0 {
+		return
+	}
+	retry--
+	response, err := ClientBuilder().
+		Context(ctx).
+		Proxies(proxies).
+		GET("https://chat.lmsys.org/info").
+		Header("pragma", "no-cache").
+		Header("cache-control", "no-cache").
+		Header("Accept-Language", "en-US,en;q=0.9").
+		Header("Origin", "https://arena.lmsys.org").
+		Header("Referer", "https://arena.lmsys.org/").
+		Header("priority", "u=1, i").
+		Header("cookie", baseCookies).
+		Header("User-Agent", userAgent).
+		DoS(http.StatusOK)
+	if err != nil {
+		fmt.Println(err)
+		goto label
+	}
+
+	cookie := GetCookie(response, "SERVERID")
+	if cookie == "" {
+		goto label
+	}
+
+	co := strings.Split(cookie, "|")
+	if len(co) < 2 {
+		goto label
+	}
+
+	if len(co[0]) < 1 || co[0][0] != 'S' {
+		goto label
+	}
+
+	if co[0] == "S0" {
+		goto label
+	}
+	cookies = fmt.Sprintf("SERVERID=%s", cookie)
+	cookies = MergeCookies(baseCookies, cookies)
+	return
 }
