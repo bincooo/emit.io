@@ -19,6 +19,7 @@ type Conn struct {
 	headers map[string]string
 	query   []string
 	err     error
+	ctx     context.Context
 
 	jar http.CookieJar
 }
@@ -37,6 +38,11 @@ func (conn *Conn) URL(url string) *Conn {
 
 func (conn *Conn) Proxies(proxies string) *Conn {
 	conn.proxies = proxies
+	return conn
+}
+
+func (conn *Conn) Context(ctx context.Context) *Conn {
+	conn.ctx = ctx
 	return conn
 }
 
@@ -103,6 +109,10 @@ func (conn *Conn) Do() (*websocket.Conn, *http.Response, error) {
 		err = Error{-1, "Do", err}
 	}
 
+	if conn.ctx != nil {
+		go warpC(c, conn.ctx)
+	}
+
 	return c, response, err
 }
 
@@ -140,4 +150,20 @@ func socket(proxies, u string, header http.Header, jar http.CookieJar) (*websock
 	}
 
 	return dialer.Dial(u, header)
+}
+
+func warpC(c *websocket.Conn, ctx context.Context) {
+	if ctx == nil {
+		return
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			_ = c.Close()
+			return
+		default:
+			time.Sleep(time.Second) //
+		}
+	}
 }
