@@ -160,7 +160,9 @@ func warpC(c *websocket.Conn, ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			_ = c.Close()
+			if errors.Is(ctx.Err(), context.Canceled) {
+				_ = c.Close()
+			}
 			return
 		default:
 			time.Sleep(time.Second) //
