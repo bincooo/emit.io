@@ -109,7 +109,7 @@ func (conn *Conn) Do() (*websocket.Conn, *http.Response, error) {
 		err = Error{-1, "Do", err}
 	}
 
-	if conn.ctx != nil {
+	if err == nil && conn.ctx != nil {
 		go warpC(c, conn.ctx)
 	}
 
@@ -153,7 +153,7 @@ func socket(proxies, u string, header http.Header, jar http.CookieJar) (*websock
 }
 
 func warpC(c *websocket.Conn, ctx context.Context) {
-	if ctx == nil {
+	if c == nil || ctx == nil {
 		return
 	}
 
