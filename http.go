@@ -42,7 +42,7 @@ type Client struct {
 	buffer  io.Reader
 	jar     http.CookieJar
 	ja3     string
-	option  ConnectOption
+	option  *ConnectOption
 }
 
 func ClientBuilder() *Client {
@@ -50,11 +50,6 @@ func ClientBuilder() *Client {
 		method:  http.MethodGet,
 		query:   make([]string, 0),
 		headers: make(map[string]string),
-		option: ConnectOption{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-		},
 	}
 }
 
@@ -107,10 +102,15 @@ func (c *Client) CookieJar(jar http.CookieJar) *Client {
 	return c
 }
 
-func (c *Client) Option(opt ConnectOption) *Client {
+func (c *Client) Option(opt *ConnectOption) *Client {
+	if opt == nil {
+		return c
+	}
+
 	if opt.TLSClientConfig == nil {
 		opt.TLSClientConfig = c.option.TLSClientConfig
 	}
+
 	c.option = opt
 	return c
 }
@@ -326,8 +326,36 @@ func (c *Client) doJ() (*http.Response, error) {
 	return &r, err
 }
 
-func client(proxies string, option ConnectOption) (*http.Client, error) {
+func client(proxies string, option *ConnectOption) (*http.Client, error) {
 	c := http.DefaultClient
+
+	newTransport := func(t *http.Transport) *http.Transport {
+		if option == nil {
+			return nil
+		}
+
+		if t == nil {
+			t = &http.Transport{}
+		}
+
+		if option.TLSClientConfig == nil {
+			t.TLSClientConfig = &tls.Config{
+				InsecureSkipVerify: true,
+			}
+		} else {
+			t.TLSClientConfig = option.TLSClientConfig
+		}
+
+		t.TLSHandshakeTimeout = option.TLSHandshakeTimeout
+		t.ResponseHeaderTimeout = option.ResponseHeaderTimeout
+		t.ExpectContinueTimeout = option.ExpectContinueTimeout
+		t.IdleConnTimeout = option.IdleConnTimeout
+		t.MaxIdleConns = option.MaxIdleConnects
+		t.DisableKeepAlives = option.DisableKeepAlive
+
+		return t
+	}
+
 	if proxies != "" {
 		proxiesUrl, err := url.Parse(proxies)
 		if err != nil {
@@ -336,23 +364,16 @@ func client(proxies string, option ConnectOption) (*http.Client, error) {
 
 		if proxiesUrl.Scheme == "http" || proxiesUrl.Scheme == "https" {
 			c = &http.Client{
-				Transport: &http.Transport{
-					Proxy:                 http.ProxyURL(proxiesUrl),
-					TLSClientConfig:       option.TLSClientConfig,
-					TLSHandshakeTimeout:   option.TLSHandshakeTimeout,
-					ResponseHeaderTimeout: option.ResponseHeaderTimeout,
-					ExpectContinueTimeout: option.ExpectContinueTimeout,
-					IdleConnTimeout:       option.IdleConnTimeout,
-					MaxIdleConns:          option.MaxIdleConnects,
-					DisableKeepAlives:     option.DisableKeepAlive,
-				},
+				Transport: newTransport(&http.Transport{
+					Proxy: http.ProxyURL(proxiesUrl),
+				}),
 			}
 		}
 
 		// socks5://127.0.0.1:7890
 		if proxiesUrl.Scheme == "socks5" {
 			c = &http.Client{
-				Transport: &http.Transport{
+				Transport: newTransport(&http.Transport{
 					DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 						dialer, e := proxy.SOCKS5("tcp", proxiesUrl.Host, nil, proxy.Direct)
 						if e != nil {
@@ -360,16 +381,11 @@ func client(proxies string, option ConnectOption) (*http.Client, error) {
 						}
 						return dialer.Dial(network, addr)
 					},
-					TLSClientConfig:       option.TLSClientConfig,
-					TLSHandshakeTimeout:   option.TLSHandshakeTimeout,
-					ResponseHeaderTimeout: option.ResponseHeaderTimeout,
-					ExpectContinueTimeout: option.ExpectContinueTimeout,
-					IdleConnTimeout:       option.IdleConnTimeout,
-					MaxIdleConns:          option.MaxIdleConnects,
-					DisableKeepAlives:     option.DisableKeepAlive,
-				},
+				}),
 			}
 		}
+	} else if c.Transport == nil {
+		c.Transport = newTransport(nil)
 	}
 
 	return c, nil
