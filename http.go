@@ -19,6 +19,17 @@ import (
 	"time"
 )
 
+type ConnectOption struct {
+	TLSHandshakeTimeout   time.Duration
+	ResponseHeaderTimeout time.Duration
+	ExpectContinueTimeout time.Duration
+	IdleConnTimeout       time.Duration
+	DisableKeepAlive      bool
+	MaxIdleConnects       int
+
+	TLSClientConfig *tls.Config
+}
+
 type Client struct {
 	url     string
 	method  string
@@ -31,6 +42,7 @@ type Client struct {
 	buffer  io.Reader
 	jar     http.CookieJar
 	ja3     string
+	option  ConnectOption
 }
 
 func ClientBuilder() *Client {
@@ -38,6 +50,11 @@ func ClientBuilder() *Client {
 		method:  http.MethodGet,
 		query:   make([]string, 0),
 		headers: make(map[string]string),
+		option: ConnectOption{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
 	}
 }
 
@@ -87,6 +104,14 @@ func (c *Client) Context(ctx context.Context) *Client {
 
 func (c *Client) CookieJar(jar http.CookieJar) *Client {
 	c.jar = jar
+	return c
+}
+
+func (c *Client) Option(opt ConnectOption) *Client {
+	if opt.TLSClientConfig == nil {
+		opt.TLSClientConfig = c.option.TLSClientConfig
+	}
+	c.option = opt
 	return c
 }
 
@@ -165,7 +190,7 @@ func (c *Client) Do() (*http.Response, error) {
 		return c.doJ()
 	}
 
-	cli, err := client(c.proxies)
+	cli, err := client(c.proxies, c.option)
 	if err != nil {
 		return nil, Error{-1, "Do", err}
 	}
@@ -301,7 +326,7 @@ func (c *Client) doJ() (*http.Response, error) {
 	return &r, err
 }
 
-func client(proxies string) (*http.Client, error) {
+func client(proxies string, option ConnectOption) (*http.Client, error) {
 	c := http.DefaultClient
 	if proxies != "" {
 		proxiesUrl, err := url.Parse(proxies)
@@ -312,10 +337,14 @@ func client(proxies string) (*http.Client, error) {
 		if proxiesUrl.Scheme == "http" || proxiesUrl.Scheme == "https" {
 			c = &http.Client{
 				Transport: &http.Transport{
-					Proxy: http.ProxyURL(proxiesUrl),
-					TLSClientConfig: &tls.Config{
-						InsecureSkipVerify: true,
-					},
+					Proxy:                 http.ProxyURL(proxiesUrl),
+					TLSClientConfig:       option.TLSClientConfig,
+					TLSHandshakeTimeout:   option.TLSHandshakeTimeout,
+					ResponseHeaderTimeout: option.ResponseHeaderTimeout,
+					ExpectContinueTimeout: option.ExpectContinueTimeout,
+					IdleConnTimeout:       option.IdleConnTimeout,
+					MaxIdleConns:          option.MaxIdleConnects,
+					DisableKeepAlives:     option.DisableKeepAlive,
 				},
 			}
 		}
@@ -331,9 +360,13 @@ func client(proxies string) (*http.Client, error) {
 						}
 						return dialer.Dial(network, addr)
 					},
-					TLSClientConfig: &tls.Config{
-						InsecureSkipVerify: true,
-					},
+					TLSClientConfig:       option.TLSClientConfig,
+					TLSHandshakeTimeout:   option.TLSHandshakeTimeout,
+					ResponseHeaderTimeout: option.ResponseHeaderTimeout,
+					ExpectContinueTimeout: option.ExpectContinueTimeout,
+					IdleConnTimeout:       option.IdleConnTimeout,
+					MaxIdleConns:          option.MaxIdleConnects,
+					DisableKeepAlives:     option.DisableKeepAlive,
 				},
 			}
 		}

@@ -1,6 +1,8 @@
 package emit
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -11,8 +13,8 @@ import (
 
 const (
 	proxies     = "http://127.0.0.1:7890"
-	userAgent   = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0"
-	baseCookies = "_gid=GA1.2.68066840.1717017781; _ga_K6D24EE9ED=GS1.1.1717087813.23.1.1717088648.0.0.0; _gat_gtag_UA_156449732_1=1; _ga_R1FN4KJKJH=GS1.1.1717087813.37.1.1717088648.0.0.0; _ga=GA1.1.1320014795.1715641484"
+	userAgent   = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0"
+	baseCookies = "_ga=GA1.1.1320014795.1715641484; _ga_K6D24EE9ED=GS1.1.1717132441.24.0.1717132441.0.0.0; _ga_R1FN4KJKJH=GS1.1.1717132441.38.0.1717132441.0.0.0"
 )
 
 func TestRandIP(t *testing.T) {
@@ -43,6 +45,9 @@ func TestClaude3Haiku20240307(t *testing.T) {
 	response, err := ClientBuilder().
 		Proxies(proxies).
 		Context(ctx).
+		Option(ConnectOption{
+			IdleConnTimeout: 10 * time.Second,
+		}).
 		POST("https://chat.lmsys.org/queue/join").
 		Header("Origin", "https://chat.lmsys.org").
 		Header("Referer", "https://chat.lmsys.org/").
@@ -242,12 +247,10 @@ label:
 		Context(ctx).
 		Proxies(proxies).
 		GET("https://chat.lmsys.org/info").
-		Header("pragma", "no-cache").
-		Header("cache-control", "no-cache").
 		Header("Accept-Language", "en-US,en;q=0.9").
-		Header("Origin", "https://arena.lmsys.org").
-		Header("Referer", "https://arena.lmsys.org/").
-		Header("priority", "u=1, i").
+		//Header("Origin", "https://chat.lmsys.org").
+		Header("Host", "chat.lmsys.org").
+		Header("Referer", "https://chat.lmsys.org/").
 		Header("cookie", baseCookies).
 		Header("User-Agent", userAgent).
 		DoS(http.StatusOK)
@@ -276,4 +279,52 @@ label:
 	cookies = fmt.Sprintf("SERVERID=%s", cookie)
 	cookies = MergeCookies(baseCookies, cookies)
 	return
+}
+
+func TestAPI(t *testing.T) {
+	response, err := ClientBuilder().
+		POST("http://127.0.0.1:8000/chat").
+		JHeader().
+		Body(map[string]interface{}{
+			"previousMessages": make([]string, 0),
+			"message":          "帮我打开计算器",
+		}).DoC(Status(http.StatusOK), IsSTREAM)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := bufio.NewScanner(response.Body)
+	scanner.Split(func(data []byte, eof bool) (advance int, token []byte, err error) {
+		if eof && len(data) == 0 {
+			return 0, nil, nil
+		}
+
+		if i := bytes.IndexByte(data, '\n'); i >= 0 {
+			return i + 1, data[0:i], nil
+		}
+
+		if eof {
+			return len(data), data, nil
+		}
+
+		return 0, nil, nil
+	})
+
+	for {
+		if !scanner.Scan() {
+			break
+		}
+
+		data := scanner.Text()
+		if len(data) < 6 || data[:6] != "data: " {
+			continue
+		}
+
+		data = data[6:]
+		if data == "[DONE]" {
+			break
+		}
+
+		t.Log(data)
+	}
 }
