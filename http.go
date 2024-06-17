@@ -329,7 +329,7 @@ func (c *Client) doJ() (*http.Response, error) {
 func client(proxies string, option *ConnectOption) (*http.Client, error) {
 	c := http.DefaultClient
 
-	newTransport := func(t *http.Transport) *http.Transport {
+	newTransport := func(t *http.Transport) http.RoundTripper {
 		if option == nil {
 			return nil
 		}
