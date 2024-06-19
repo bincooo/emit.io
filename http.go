@@ -51,6 +51,15 @@ type Session struct {
 	requests *requests.Client
 }
 
+func (session *Session) IdleClose() {
+	if session.client != nil {
+		session.client.CloseIdleConnections()
+	}
+	if session.requests != nil {
+		session.requests.CloseConns()
+	}
+}
+
 func NewDefaultSession(proxies string, option *ConnectOption) (*Session, error) {
 	cli, err := client(proxies, option)
 	if err != nil {
