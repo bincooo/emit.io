@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	proxies     = "" // "http://127.0.0.1:7890"
+	proxies     = "http://127.0.0.1:7890"
 	userAgent   = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0"
 	baseCookies = "_ga=GA1.1.1320014795.1715641484; _ga_K6D24EE9ED=GS1.1.1717132441.24.0.1717132441.0.0.0; _ga_R1FN4KJKJH=GS1.1.1717132441.38.0.1717132441.0.0.0"
 )
@@ -41,11 +41,18 @@ func TestClaude3Haiku20240307(t *testing.T) {
 		},
 	}
 
-	cookies := fetchCookies(ctx, proxies)
-	response, err := ClientBuilder().
+	session, err := NewDefaultSession(proxies, &ConnectOption{
+		IdleConnTimeout: 10 * time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cookies := fetchCookies(ctx, session)
+	response, err := ClientBuilder(session).
 		Proxies(proxies).
 		Context(ctx).
-		Option(ConnectOption{
+		Option(&ConnectOption{
 			IdleConnTimeout: 10 * time.Second,
 		}).
 		POST("https://chat.lmsys.org/queue/join").
@@ -70,7 +77,7 @@ func TestClaude3Haiku20240307(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	response, err = ClientBuilder().
+	response, err = ClientBuilder(session).
 		Proxies(proxies).
 		Context(ctx).
 		GET("https://chat.lmsys.org/queue/data").
@@ -111,7 +118,7 @@ func TestClaude3Haiku20240307(t *testing.T) {
 			ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
-			response, err = ClientBuilder().
+			response, err = ClientBuilder(nil).
 				Proxies(proxies).
 				Context(ctx).
 				POST("https://chat.lmsys.org/queue/join").
@@ -149,7 +156,7 @@ func TestClaude3Haiku20240307(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	response, err = ClientBuilder().
+	response, err = ClientBuilder(nil).
 		Proxies(proxies).
 		Context(ctx).
 		GET("https://chat.lmsys.org/queue/data").
@@ -236,14 +243,14 @@ func TestGioSDXL(t *testing.T) {
 	}
 }
 
-func fetchCookies(ctx context.Context, proxies string) (cookies string) {
+func fetchCookies(ctx context.Context, session *Session) (cookies string) {
 	retry := 3
 label:
 	if retry <= 0 {
 		return
 	}
 	retry--
-	response, err := ClientBuilder().
+	response, err := ClientBuilder(session).
 		Context(ctx).
 		Proxies(proxies).
 		GET("https://chat.lmsys.org/info").
@@ -282,7 +289,7 @@ label:
 }
 
 func TestAPI(t *testing.T) {
-	response, err := ClientBuilder().
+	response, err := ClientBuilder(nil).
 		POST("http://127.0.0.1:8000/chat").
 		JHeader().
 		Body(map[string]interface{}{

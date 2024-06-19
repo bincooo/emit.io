@@ -42,14 +42,47 @@ type Client struct {
 	buffer  io.Reader
 	jar     http.CookieJar
 	ja3     string
+	session *Session
 	option  *ConnectOption
 }
 
-func ClientBuilder() *Client {
+type Session struct {
+	client   *http.Client
+	requests *requests.Client
+}
+
+func NewDefaultSession(proxies string, option *ConnectOption) (*Session, error) {
+	cli, err := client(proxies, option)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Session{
+		client: cli,
+	}, nil
+}
+
+func NewJa3Session(proxies string) (*Session, error) {
+	s, err := requests.NewClient(context.Background())
+	if err != nil {
+		return nil, Error{-1, "Do", err}
+	}
+
+	err = s.SetProxy(proxies)
+	if err != nil {
+		return nil, Error{-1, "Do", err}
+	}
+	return &Session{
+		requests: s,
+	}, nil
+}
+
+func ClientBuilder(session *Session) *Client {
 	return &Client{
 		method:  http.MethodGet,
 		query:   make([]string, 0),
 		headers: make(map[string]string),
+		session: session,
 	}
 }
 
@@ -107,7 +140,7 @@ func (c *Client) Option(opt *ConnectOption) *Client {
 		return c
 	}
 
-	if opt.TLSClientConfig == nil {
+	if opt.TLSClientConfig == nil && c.option != nil {
 		opt.TLSClientConfig = c.option.TLSClientConfig
 	}
 
@@ -190,9 +223,15 @@ func (c *Client) Do() (*http.Response, error) {
 		return c.doJ()
 	}
 
-	cli, err := client(c.proxies, c.option)
-	if err != nil {
-		return nil, Error{-1, "Do", err}
+	var session *http.Client
+	if c.session != nil && c.session.client != nil {
+		session = c.session.client
+	} else {
+		cli, err := client(c.proxies, c.option)
+		if err != nil {
+			return nil, Error{-1, "Do", err}
+		}
+		session = cli
 	}
 
 	query := ""
@@ -205,7 +244,7 @@ func (c *Client) Do() (*http.Response, error) {
 	}
 
 	if c.jar != nil {
-		cli.Jar = c.jar
+		session.Jar = c.jar
 	}
 
 	if c.buffer == nil {
@@ -226,7 +265,7 @@ func (c *Client) Do() (*http.Response, error) {
 		request = request.WithContext(c.ctx)
 	}
 
-	response, err := cli.Do(request)
+	response, err := session.Do(request)
 	if err != nil {
 		err = Error{-1, "Do", err}
 	}
@@ -253,14 +292,20 @@ func (c *Client) doJ() (*http.Response, error) {
 		defer cancel()
 	}
 
-	session, err := requests.NewClient(c.ctx)
-	if err != nil {
-		return nil, Error{-1, "Do", err}
-	}
+	var session *requests.Client
+	if c.session != nil && c.session.requests != nil {
+		session = c.session.requests
+	} else {
+		s, err := requests.NewClient(c.ctx)
+		if err != nil {
+			return nil, Error{-1, "Do", err}
+		}
 
-	err = session.SetProxy(c.proxies)
-	if err != nil {
-		return nil, Error{-1, "Do", err}
+		err = s.SetProxy(c.proxies)
+		if err != nil {
+			return nil, Error{-1, "Do", err}
+		}
+		session = s
 	}
 
 	query := ""
@@ -273,7 +318,11 @@ func (c *Client) doJ() (*http.Response, error) {
 	}
 
 	if c.jar != nil {
-		var u *url.URL
+		var (
+			u   *url.URL
+			err error
+		)
+
 		if u, err = url.Parse(c.url); err != nil {
 			return nil, Error{-1, "Do", err}
 		}
