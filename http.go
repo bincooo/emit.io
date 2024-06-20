@@ -88,13 +88,14 @@ func NewJa3Session(proxies string) (*Session, error) {
 	}, nil
 }
 
-func MergeSession(session *Session, sessions ...*Session) {
-	if session == nil {
-		panic("session is nil")
-	}
-
+func MergeSession(sessions ...*Session) (session *Session) {
 	for _, s := range sessions {
 		if s == nil {
+			continue
+		}
+
+		if session == nil {
+			session = s
 			continue
 		}
 
@@ -102,14 +103,15 @@ func MergeSession(session *Session, sessions ...*Session) {
 			session.client = s.client
 		}
 
-		if session.requests != nil {
+		if s.requests != nil {
 			session.requests = s.requests
 		}
 
-		if session.dialer != nil {
+		if s.dialer != nil {
 			session.dialer = s.dialer
 		}
 	}
+	return
 }
 
 func ClientBuilder(session *Session) *Client {

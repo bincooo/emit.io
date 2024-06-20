@@ -173,7 +173,6 @@ func socket(proxies string, opts *ConnectOption) (*websocket.Dialer, error) {
 		}
 
 		if pu.Scheme == "http" || pu.Scheme == "https" {
-
 			dialer = &websocket.Dialer{
 				Proxy:            http.ProxyURL(pu),
 				HandshakeTimeout: handshakeTimeout,
