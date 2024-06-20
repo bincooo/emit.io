@@ -280,6 +280,7 @@ func (c *Client) Do() (*http.Response, error) {
 		err = Error{-1, "Do", err}
 	}
 
+	_ = request.Body.Close()
 	return response, err
 }
 
