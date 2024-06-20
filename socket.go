@@ -114,7 +114,10 @@ func (conn *Conn) Do() (*websocket.Conn, *http.Response, error) {
 		go warpC(c, conn.ctx)
 	}
 
-	_ = response.Request.Body.Close()
+	if response.Request.Body != nil {
+		_ = response.Request.Body.Close()
+	}
+
 	return c, response, err
 }
 
