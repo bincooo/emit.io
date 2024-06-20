@@ -88,6 +88,32 @@ func NewJa3Session(proxies string) (*Session, error) {
 	}, nil
 }
 
+func MergeSession(sessions ...*Session) {
+	var session *Session
+	for _, s := range sessions {
+		if s == nil {
+			continue
+		}
+
+		if session == nil {
+			session = s
+			continue
+		}
+
+		if s.client != nil {
+			session.client = s.client
+		}
+
+		if session.requests != nil {
+			session.requests = s.requests
+		}
+
+		if session.dialer != nil {
+			session.dialer = s.dialer
+		}
+	}
+}
+
 func ClientBuilder(session *Session) *Client {
 	return &Client{
 		method:  http.MethodGet,
