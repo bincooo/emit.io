@@ -208,6 +208,7 @@ func (c *Client) DoC(funs ...func(*http.Response) error) (*http.Response, error)
 	for _, condition := range funs {
 		err = condition(response)
 		if err != nil {
+			_ = response.Body.Close()
 			return response, err
 		}
 	}
@@ -369,6 +370,7 @@ func (c *Client) doJ() (*http.Response, error) {
 		body = response.Conn()
 	} else {
 		body = io.NopCloser(bytes.NewBuffer(response.Content()))
+		response.CloseBody()
 	}
 
 	protoMajor, _ := strconv.Atoi(response.Proto()[5:6])
