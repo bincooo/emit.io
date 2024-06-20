@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/RomiChan/websocket"
 	"github.com/gospider007/ja3"
 	"github.com/gospider007/requests"
 	"golang.org/x/net/proxy"
@@ -49,6 +50,7 @@ type Client struct {
 type Session struct {
 	client   *http.Client
 	requests *requests.Client
+	dialer   *websocket.Dialer
 }
 
 func (session *Session) IdleClose() {

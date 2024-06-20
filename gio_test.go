@@ -190,7 +190,7 @@ func TestClaude3Haiku20240307(t *testing.T) {
 func TestGioSDXL(t *testing.T) {
 	p := "1girl"
 	n := ""
-	conn, err := SocketBuilder().
+	conn, _, err := SocketBuilder(nil).
 		Proxies(proxies).
 		URL("wss://tonyassi-text-to-image-sdxl.hf.space/queue/join").
 		Header("User-Agent", userAgent).

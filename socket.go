@@ -22,12 +22,26 @@ type Conn struct {
 	ctx     context.Context
 
 	jar http.CookieJar
+
+	session *Session
+	option  *ConnectOption
 }
 
-func SocketBuilder() *Conn {
+func NewSocketSession(proxies string, option *ConnectOption) (*Session, error) {
+	dialer, err := socket(proxies, option)
+	if err != nil {
+		return nil, err
+	}
+	return &Session{
+		dialer: dialer,
+	}, nil
+}
+
+func SocketBuilder(session *Session) *Conn {
 	return &Conn{
 		query:   make([]string, 0),
 		headers: make(map[string]string),
+		session: session,
 	}
 }
 
@@ -51,6 +65,15 @@ func (conn *Conn) CookieJar(jar http.CookieJar) *Conn {
 	return conn
 }
 
+func (conn *Conn) Option(opt *ConnectOption) *Conn {
+	if opt == nil {
+		return conn
+	}
+
+	conn.option = opt
+	return conn
+}
+
 func (conn *Conn) Header(key, value string) *Conn {
 	conn.headers[key] = value
 	return conn
@@ -61,25 +84,25 @@ func (conn *Conn) Query(key, value string) *Conn {
 	return conn
 }
 
-func (conn *Conn) DoS(status int) (*websocket.Conn, error) {
+func (conn *Conn) DoS(status int) (*websocket.Conn, *http.Response, error) {
 	return conn.DoC(Status(status))
 }
 
-func (conn *Conn) DoC(funs ...func(*http.Response) error) (*websocket.Conn, error) {
+func (conn *Conn) DoC(funs ...func(*http.Response) error) (*websocket.Conn, *http.Response, error) {
 	c, response, err := conn.Do()
 	if err != nil {
-		return c, err
+		return c, response, err
 	}
 
 	for _, condition := range funs {
 		err = condition(response)
 		if err != nil {
 			_ = response.Body.Close()
-			return c, err
+			return c, response, err
 		}
 	}
 
-	return c, nil
+	return c, response, nil
 }
 
 func (conn *Conn) Do() (*websocket.Conn, *http.Response, error) {
@@ -105,12 +128,27 @@ func (conn *Conn) Do() (*websocket.Conn, *http.Response, error) {
 		h.Add(k, v)
 	}
 
-	c, response, err := socket(conn.proxies, conn.url+query, h, conn.jar)
-	if err != nil {
-		err = Error{-1, "Do", err}
+	var dialer *websocket.Dialer
+	if conn.session != nil {
+		dialer = conn.session.dialer
+	} else {
+		var err error
+		dialer, err = socket(conn.proxies, conn.option)
+		if err != nil {
+			err = Error{-1, "Do", err}
+		}
 	}
 
-	if err == nil && conn.ctx != nil {
+	if conn.jar != nil {
+		dialer.Jar = conn.jar
+	}
+
+	c, response, err := dialer.Dial(conn.url+query, h)
+	if err != nil {
+		return c, response, err
+	}
+
+	if conn.ctx != nil {
 		go warpC(c, conn.ctx)
 	}
 
@@ -121,18 +159,36 @@ func (conn *Conn) Do() (*websocket.Conn, *http.Response, error) {
 	return c, response, err
 }
 
-func socket(proxies, u string, header http.Header, jar http.CookieJar) (*websocket.Conn, *http.Response, error) {
+func socket(proxies string, opts *ConnectOption) (*websocket.Dialer, error) {
 	dialer := websocket.DefaultDialer
 	if proxies != "" {
 		pu, err := url.Parse(proxies)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
+		}
+
+		handshakeTimeout := 45 * time.Second
+		if opts != nil && opts.TLSHandshakeTimeout > 0 {
+			handshakeTimeout = opts.TLSHandshakeTimeout
 		}
 
 		if pu.Scheme == "http" || pu.Scheme == "https" {
+
 			dialer = &websocket.Dialer{
 				Proxy:            http.ProxyURL(pu),
-				HandshakeTimeout: 45 * time.Second,
+				HandshakeTimeout: handshakeTimeout,
+				NetDialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+					d := &net.Dialer{}
+					if opts != nil {
+						if opts.IdleConnTimeout > 0 {
+							d.KeepAlive = opts.IdleConnTimeout
+						}
+						if opts.DisableKeepAlive {
+							d.KeepAlive = 0
+						}
+					}
+					return d.DialContext(ctx, network, addr)
+				},
 			}
 		}
 
@@ -143,18 +199,29 @@ func socket(proxies, u string, header http.Header, jar http.CookieJar) (*websock
 					if e != nil {
 						return nil, e
 					}
-					return d.Dial(network, addr)
+
+					c, e := d.Dial(network, addr)
+					if e != nil {
+						return nil, e
+					}
+
+					conn := c.(*net.TCPConn)
+					if opts != nil {
+						if opts.IdleConnTimeout > 0 {
+							_ = conn.SetKeepAlivePeriod(opts.IdleConnTimeout)
+						}
+						if opts.DisableKeepAlive {
+							_ = conn.SetKeepAlive(false)
+						}
+					}
+					return conn, nil
 				},
-				HandshakeTimeout: 45 * time.Second,
+				HandshakeTimeout: handshakeTimeout,
 			}
 		}
 	}
 
-	if jar != nil {
-		dialer.Jar = jar
-	}
-
-	return dialer.Dial(u, header)
+	return dialer, nil
 }
 
 func warpC(c *websocket.Conn, ctx context.Context) {
