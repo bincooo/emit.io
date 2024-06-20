@@ -74,6 +74,7 @@ func (conn *Conn) DoC(funs ...func(*http.Response) error) (*websocket.Conn, erro
 	for _, condition := range funs {
 		err = condition(response)
 		if err != nil {
+			_ = response.Body.Close()
 			return c, err
 		}
 	}
@@ -113,6 +114,7 @@ func (conn *Conn) Do() (*websocket.Conn, *http.Response, error) {
 		go warpC(c, conn.ctx)
 	}
 
+	_ = response.Request.Body.Close()
 	return c, response, err
 }
 
