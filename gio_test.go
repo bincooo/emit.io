@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	proxies     = "http://127.0.0.1:7890"
+	proxies     = "socks5://127.0.0.1:7890"
 	userAgent   = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0"
 	baseCookies = "_ga=GA1.1.1320014795.1715641484; _ga_K6D24EE9ED=GS1.1.1717132441.24.0.1717132441.0.0.0; _ga_R1FN4KJKJH=GS1.1.1717132441.38.0.1717132441.0.0.0"
 )

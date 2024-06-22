@@ -16,6 +16,7 @@ import (
 type Conn struct {
 	url     string
 	proxies string
+	whites  []string
 	headers map[string]string
 	query   []string
 	err     error
@@ -27,8 +28,8 @@ type Conn struct {
 	option  *ConnectOption
 }
 
-func NewSocketSession(proxies string, option *ConnectOption) (*Session, error) {
-	dialer, err := socket(proxies, option)
+func NewSocketSession(proxies string, option *ConnectOption, whites ...string) (*Session, error) {
+	dialer, err := socket(proxies, whites, option)
 	if err != nil {
 		return nil, err
 	}
@@ -50,8 +51,9 @@ func (conn *Conn) URL(url string) *Conn {
 	return conn
 }
 
-func (conn *Conn) Proxies(proxies string) *Conn {
+func (conn *Conn) Proxies(proxies string, whites ...string) *Conn {
 	conn.proxies = proxies
+	conn.whites = whites
 	return conn
 }
 
@@ -133,7 +135,7 @@ func (conn *Conn) Do() (*websocket.Conn, *http.Response, error) {
 		dialer = conn.session.dialer
 	} else {
 		var err error
-		dialer, err = socket(conn.proxies, conn.option)
+		dialer, err = socket(conn.proxies, conn.whites, conn.option)
 		if err != nil {
 			err = Error{-1, "Do", err}
 		}
@@ -159,7 +161,7 @@ func (conn *Conn) Do() (*websocket.Conn, *http.Response, error) {
 	return c, response, err
 }
 
-func socket(proxies string, opts *ConnectOption) (*websocket.Dialer, error) {
+func socket(proxies string, whites []string, opts *ConnectOption) (*websocket.Dialer, error) {
 	dialer := websocket.DefaultDialer
 	if proxies != "" {
 		pu, err := url.Parse(proxies)
@@ -174,7 +176,16 @@ func socket(proxies string, opts *ConnectOption) (*websocket.Dialer, error) {
 
 		if pu.Scheme == "http" || pu.Scheme == "https" {
 			dialer = &websocket.Dialer{
-				Proxy:            http.ProxyURL(pu),
+				Proxy: func(r *http.Request) (*url.URL, error) {
+					if r.URL != nil {
+						for _, w := range whites {
+							if strings.HasPrefix(r.URL.Host, w) {
+								return r.URL, nil
+							}
+						}
+					}
+					return pu, nil
+				},
 				HandshakeTimeout: handshakeTimeout,
 				NetDialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 					d := &net.Dialer{}
@@ -194,6 +205,24 @@ func socket(proxies string, opts *ConnectOption) (*websocket.Dialer, error) {
 		if pu.Scheme == "socks5" {
 			dialer = &websocket.Dialer{
 				NetDialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+					for _, w := range whites {
+						if strings.HasPrefix(addr, w) {
+							c, e := proxy.Direct.Dial(network, addr)
+							if e != nil {
+								return nil, e
+							}
+							conn := c.(*net.TCPConn)
+							if opts != nil {
+								if opts.IdleConnTimeout > 0 {
+									_ = conn.SetKeepAlivePeriod(opts.IdleConnTimeout)
+								}
+								if opts.DisableKeepAlive {
+									_ = conn.SetKeepAlive(false)
+								}
+							}
+						}
+					}
+
 					d, e := proxy.SOCKS5("tcp", pu.Host, nil, proxy.Direct)
 					if e != nil {
 						return nil, e

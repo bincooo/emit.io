@@ -45,6 +45,7 @@ type Client struct {
 	ja3     string
 	session *Session
 	option  *ConnectOption
+	whites  []string
 }
 
 type Session struct {
@@ -62,8 +63,8 @@ func (session *Session) IdleClose() {
 	}
 }
 
-func NewDefaultSession(proxies string, option *ConnectOption) (*Session, error) {
-	cli, err := client(proxies, option)
+func NewDefaultSession(proxies string, option *ConnectOption, whites ...string) (*Session, error) {
+	cli, err := client(proxies, whites, option)
 	if err != nil {
 		return nil, err
 	}
@@ -157,8 +158,9 @@ func (c *Client) DELETE(url string) *Client {
 	return c
 }
 
-func (c *Client) Proxies(proxies string) *Client {
+func (c *Client) Proxies(proxies string, whites ...string) *Client {
 	c.proxies = proxies
+	c.whites = whites
 	return c
 }
 
@@ -265,7 +267,7 @@ func (c *Client) Do() (*http.Response, error) {
 	if c.session != nil && c.session.client != nil {
 		session = c.session.client
 	} else {
-		cli, err := client(c.proxies, c.option)
+		cli, err := client(c.proxies, c.whites, c.option)
 		if err != nil {
 			return nil, Error{-1, "Do", err}
 		}
@@ -415,12 +417,12 @@ func (c *Client) doJ() (*http.Response, error) {
 	return &r, err
 }
 
-func client(proxies string, option *ConnectOption) (*http.Client, error) {
+func client(proxies string, whites []string, option *ConnectOption) (*http.Client, error) {
 	c := http.DefaultClient
 
 	newTransport := func(t *http.Transport) http.RoundTripper {
 		if option == nil {
-			return nil
+			return t
 		}
 
 		if t == nil {
@@ -454,7 +456,16 @@ func client(proxies string, option *ConnectOption) (*http.Client, error) {
 		if proxiesUrl.Scheme == "http" || proxiesUrl.Scheme == "https" {
 			c = &http.Client{
 				Transport: newTransport(&http.Transport{
-					Proxy: http.ProxyURL(proxiesUrl),
+					Proxy: func(r *http.Request) (*url.URL, error) {
+						if r.URL != nil {
+							for _, w := range whites {
+								if strings.HasPrefix(r.URL.Host, w) {
+									return r.URL, nil
+								}
+							}
+						}
+						return proxiesUrl, nil
+					},
 				}),
 			}
 		}
@@ -464,6 +475,12 @@ func client(proxies string, option *ConnectOption) (*http.Client, error) {
 			c = &http.Client{
 				Transport: newTransport(&http.Transport{
 					DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+						for _, w := range whites {
+							if strings.HasPrefix(addr, w) {
+								return proxy.Direct.Dial(network, addr)
+							}
+						}
+
 						dialer, e := proxy.SOCKS5("tcp", proxiesUrl.Host, nil, proxy.Direct)
 						if e != nil {
 							return nil, e
