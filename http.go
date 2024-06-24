@@ -14,6 +14,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"strconv"
 	"strings"
@@ -591,6 +592,33 @@ func MergeCookies(sourceCookies, targetCookies string) string {
 	}
 
 	return strings.Join(buffer, "; ")
+}
+
+func NewCookieJar(baseURL, cookies string) (jar http.CookieJar, err error) {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return nil, err
+	}
+
+	jar, err = cookiejar.New(nil)
+	if err != nil {
+		return nil, err
+	}
+
+	slice := strings.Split(cookies, "; ")
+	for _, cookie := range slice {
+		kv := strings.Split(cookie, "=")
+		if len(kv) < 1 {
+			continue
+		}
+
+		k := strings.TrimSpace(kv[0])
+		v := strings.Join(kv[1:], "=")
+		jar.SetCookies(u, []*http.Cookie{{Name: k, Value: strings.TrimSpace(v)}})
+	}
+
+	// jar.SetCookies(u, []*http.Cookie{{Name: "xxx", Value: "xxx"}})
+	return
 }
 
 func TextResponse(response *http.Response) (value string) {
