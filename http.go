@@ -8,17 +8,20 @@ import (
 	"errors"
 	"fmt"
 	"github.com/RomiChan/websocket"
-	"github.com/gospider007/ja3"
-	"github.com/gospider007/requests"
+	furl "github.com/bincooo/requests/url"
+	fhttp "github.com/wangluozhe/fhttp"
 	"golang.org/x/net/proxy"
 	"io"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
+
+	"github.com/bincooo/requests"
+	_ "github.com/bincooo/requests/models"
+	fcookiejar "github.com/wangluozhe/fhttp/cookiejar"
 )
 
 type ConnectOption struct {
@@ -51,16 +54,13 @@ type Client struct {
 
 type Session struct {
 	client   *http.Client
-	requests *requests.Client
+	requests *requests.Session
 	dialer   *websocket.Dialer
 }
 
 func (session *Session) IdleClose() {
 	if session.client != nil {
 		session.client.CloseIdleConnections()
-	}
-	if session.requests != nil {
-		session.requests.CloseConns()
 	}
 }
 
@@ -75,19 +75,12 @@ func NewDefaultSession(proxies string, option *ConnectOption, whites ...string) 
 	}, nil
 }
 
-func NewJa3Session(proxies string) (*Session, error) {
-	s, err := requests.NewClient(context.Background())
-	if err != nil {
-		return nil, Error{-1, "Do", err}
-	}
-
-	err = s.SetProxy(proxies)
-	if err != nil {
-		return nil, Error{-1, "Do", err}
-	}
+func NewJa3Session(proxies string) *Session {
+	session := requests.NewSession()
+	session.Proxies = proxies
 	return &Session{
-		requests: s,
-	}, nil
+		requests: session,
+	}
 }
 
 func MergeSession(sessions ...*Session) (session *Session) {
@@ -334,20 +327,11 @@ func (c *Client) doJ() (*http.Response, error) {
 		defer cancel()
 	}
 
-	var session *requests.Client
+	var session *requests.Session
 	if c.session != nil && c.session.requests != nil {
 		session = c.session.requests
 	} else {
-		s, err := requests.NewClient(c.ctx)
-		if err != nil {
-			return nil, Error{-1, "Do", err}
-		}
-
-		err = s.SetProxy(c.proxies)
-		if err != nil {
-			return nil, Error{-1, "Do", err}
-		}
-		session = s
+		session = requests.DefaultSession()
 	}
 
 	query := ""
@@ -359,62 +343,63 @@ func (c *Client) doJ() (*http.Response, error) {
 		query = "?" + strings.Join(slice, "&")
 	}
 
+	request := furl.NewRequest()
+	request.Proxies = c.proxies
+	request.Ja3 = c.ja3
+
 	if c.jar != nil {
-		var (
-			u   *url.URL
-			err error
-		)
+		var u *url.URL
 
-		if u, err = url.Parse(c.url); err != nil {
+		u, err := url.Parse(c.url)
+		if err != nil {
 			return nil, Error{-1, "Do", err}
 		}
 
-		if err = session.SetCookies(u, c.jar); err != nil {
-			return nil, Error{-1, "Do", err}
+		jar, e := fcookiejar.New(nil)
+		if e != nil {
+			return nil, Error{-1, "Do", e}
 		}
+
+		cookies := c.jar.Cookies(u)
+		var newCookies []*fhttp.Cookie
+		for _, cookie := range cookies {
+			newCookies = append(newCookies, &fhttp.Cookie{
+				Name:  cookie.Name,
+				Value: cookie.Value,
+			})
+		}
+		jar.SetCookies(u, newCookies)
+		request.Cookies = jar
 	}
 
 	if c.buffer == nil {
 		c.buffer = bytes.NewBuffer(c.bytes)
 	}
 
-	h := requests.NewOrderMap()
+	request.Headers = &fhttp.Header{}
 	for k, v := range c.headers {
-		h.Set(k, v)
+		request.Headers.Set(k, v)
 	}
 
-	ja3Spec, err := ja3.CreateSpecWithStr(c.ja3) //create ja3 spec with string
+	response, err := session.Request(c.method, c.url+query, request, true)
 	if err != nil {
 		return nil, Error{-1, "Do", err}
 	}
 
-	response, err := session.Request(c.ctx, c.method, c.url+query, requests.RequestOption{
-		Headers: h,
-		Ja3Spec: ja3Spec,
-		Body:    c.buffer,
-	})
-	if err != nil {
-		return nil, Error{-1, "Do", err}
+	headers := response.Headers
+	newHeaders := http.Header{}
+	for k, _ := range headers {
+		newHeaders[k] = headers[k]
 	}
 
-	var body io.ReadCloser
-	if response.IsStream() {
-		body = response.Conn()
-	} else {
-		body = io.NopCloser(bytes.NewBuffer(response.Content()))
-		response.CloseBody()
-	}
-
-	protoMajor, _ := strconv.Atoi(response.Proto()[5:6])
 	r := http.Response{
-		Status:        response.Status(),
-		StatusCode:    response.StatusCode(),
-		Proto:         response.Proto(),
-		ProtoMajor:    protoMajor,
-		Header:        response.Headers(),
-		ContentLength: response.ContentLength(),
-		Body:          body,
+		Status:     http.StatusText(response.StatusCode),
+		StatusCode: response.StatusCode,
+		Proto:      "JA3",
+		Header:     newHeaders,
+		Body:       response.Body,
 	}
+
 	return &r, err
 }
 
@@ -629,5 +614,11 @@ func TextResponse(response *http.Response) (value string) {
 	if err != nil {
 		return
 	}
+
+	encoding := response.Header.Get("Content-Encoding")
+	if encoding != "" && response.Proto == "JA3" {
+		requests.DecompressBody(&bin, encoding)
+	}
+
 	return string(bin)
 }

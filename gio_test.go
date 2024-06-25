@@ -12,13 +12,35 @@ import (
 )
 
 const (
-	proxies     = "socks5://127.0.0.1:7890"
+	proxies     = "http://127.0.0.1:7890"
 	userAgent   = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0"
 	baseCookies = "_ga=GA1.1.1320014795.1715641484; _ga_K6D24EE9ED=GS1.1.1717132441.24.0.1717132441.0.0.0; _ga_R1FN4KJKJH=GS1.1.1717132441.38.0.1717132441.0.0.0"
+	ja3         = "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513-21,29-23-24,0"
+	cookies     = ""
 )
 
 func TestRandIP(t *testing.T) {
 	t.Log(RandIP())
+}
+
+func TestHTTP(t *testing.T) {
+	session := NewJa3Session(proxies)
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+
+	response, err := ClientBuilder(session).
+		GET("https://claude.ai/api/organizations").
+		Ja3(ja3).
+		Context(ctx).
+		//CookieJar(jar).
+		Header("user-agent", userAgent).
+		Header("cookie", cookies).
+		DoC(Status(http.StatusOK), IsJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Log(TextResponse(response))
 }
 
 func TestClaude3Haiku20240307(t *testing.T) {
