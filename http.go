@@ -642,8 +642,8 @@ func TextResponse(response *http.Response) (value string) {
 	return string(bin)
 }
 
-func Decode(data []byte, encoding string) {
+func Decode(data *[]byte, encoding string) {
 	if encoding != "" {
-		requests.DecompressBody(&data, encoding)
+		requests.DecompressBody(data, encoding)
 	}
 }
