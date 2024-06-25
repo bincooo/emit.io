@@ -8,8 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/RomiChan/websocket"
-	furl "github.com/bincooo/requests/url"
-	fhttp "github.com/wangluozhe/fhttp"
 	"golang.org/x/net/proxy"
 	"io"
 	"net"
@@ -20,7 +18,8 @@ import (
 	"time"
 
 	"github.com/bincooo/requests"
-	_ "github.com/bincooo/requests/models"
+	furl "github.com/bincooo/requests/url"
+	fhttp "github.com/wangluozhe/fhttp"
 	fcookiejar "github.com/wangluozhe/fhttp/cookiejar"
 )
 
@@ -321,12 +320,6 @@ func (c *Client) doJ() (*http.Response, error) {
 		}
 	}
 
-	if c.ctx == nil {
-		var cancel context.CancelFunc
-		c.ctx, cancel = context.WithTimeout(context.Background(), 300*time.Second)
-		defer cancel()
-	}
-
 	var session *requests.Session
 	if c.session != nil && c.session.requests != nil {
 		session = c.session.requests
@@ -372,13 +365,34 @@ func (c *Client) doJ() (*http.Response, error) {
 		request.Cookies = jar
 	}
 
-	if c.buffer == nil {
-		c.buffer = bytes.NewBuffer(c.bytes)
+	request.Headers = &fhttp.Header{}
+	isJ := false
+	for k, v := range c.headers {
+		if strings.ToLower(k) == "content-type" {
+			if strings.Contains(v, "application/json") {
+				isJ = true
+			}
+		}
+		request.Headers.Set(k, v)
 	}
 
-	request.Headers = &fhttp.Header{}
-	for k, v := range c.headers {
-		request.Headers.Set(k, v)
+	if len(c.bytes) == 0 && c.buffer != nil {
+		data, err := io.ReadAll(c.buffer)
+		if err != nil {
+			return nil, Error{-1, "Do", err}
+		}
+		c.bytes = data
+	}
+
+	if isJ {
+		var js map[string]interface{}
+		if err := json.Unmarshal(c.bytes, &js); err != nil {
+			return nil, Error{-1, "Do", err}
+		}
+
+		request.Json = js
+	} else {
+		request.Body = string(c.bytes)
 	}
 
 	response, err := session.Request(c.method, c.url+query, request, true)
@@ -626,4 +640,10 @@ func TextResponse(response *http.Response) (value string) {
 	}
 
 	return string(bin)
+}
+
+func Decode(data []byte, encoding string) {
+	if encoding != "" {
+		requests.DecompressBody(&data, encoding)
+	}
 }
