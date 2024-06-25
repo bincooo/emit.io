@@ -490,6 +490,11 @@ func ToObject(response *http.Response, obj interface{}) (err error) {
 		return
 	}
 
+	encoding := response.Header.Get("Content-Encoding")
+	if encoding != "" && response.Proto == "JA3" {
+		requests.DecompressBody(&data, encoding)
+	}
+
 	err = json.Unmarshal(data, obj)
 	return
 }
