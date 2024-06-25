@@ -24,14 +24,10 @@ func TestRandIP(t *testing.T) {
 }
 
 func TestHTTP(t *testing.T) {
-	session := NewJa3Session(proxies)
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
-	defer cancel()
-
+	session := NewJa3Session(proxies, 180*time.Second)
 	response, err := ClientBuilder(session).
 		GET("https://claude.ai/api/organizations").
 		Ja3(ja3).
-		Context(ctx).
 		//CookieJar(jar).
 		Header("user-agent", userAgent).
 		Header("cookie", cookies).

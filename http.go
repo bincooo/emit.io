@@ -55,6 +55,8 @@ type Session struct {
 	client   *http.Client
 	requests *requests.Session
 	dialer   *websocket.Dialer
+
+	timeout time.Duration // 给requests用的
 }
 
 func (session *Session) IdleClose() {
@@ -74,11 +76,12 @@ func NewDefaultSession(proxies string, option *ConnectOption, whites ...string) 
 	}, nil
 }
 
-func NewJa3Session(proxies string) *Session {
+func NewJa3Session(proxies string, timeout time.Duration) *Session {
 	session := requests.NewSession()
 	session.Proxies = proxies
 	return &Session{
 		requests: session,
+		timeout:  timeout,
 	}
 }
 
