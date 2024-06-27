@@ -17,10 +17,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bincooo/requests"
-	furl "github.com/bincooo/requests/url"
-	fhttp "github.com/wangluozhe/fhttp"
-	fcookiejar "github.com/wangluozhe/fhttp/cookiejar"
+	"github.com/wangluozhe/requests"
+
+	fhttp "github.com/wangluozhe/chttp"
+	fcookiejar "github.com/wangluozhe/chttp/cookiejar"
+	furl "github.com/wangluozhe/requests/url"
 )
 
 type ConnectOption struct {
@@ -398,7 +399,7 @@ func (c *Client) doJ() (*http.Response, error) {
 		request.Body = string(c.bytes)
 	}
 
-	response, err := session.Request(c.method, c.url+query, request, true)
+	response, err := session.Request(c.method, c.url+query, request)
 	if err != nil {
 		return nil, Error{-1, "Do", err}
 	}
