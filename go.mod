@@ -7,7 +7,7 @@ require (
 	golang.org/x/net v0.25.0
 )
 
-replace github.com/wangluozhe/requests v1.2.4 => github.com/bincooo/requests v0.0.0-20240627071243-53dc71945c20
+replace github.com/wangluozhe/requests v1.2.4 => github.com/bincooo/requests v0.0.0-20240627215101-765935c797c5
 
 require (
 	github.com/andybalholm/brotli v1.1.0 // indirect
