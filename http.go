@@ -425,19 +425,19 @@ func client(proxies string, whites []string, option *ConnectOption) (*http.Clien
 	c := http.DefaultClient
 
 	newTransport := func(t *http.Transport) http.RoundTripper {
+		if t == nil {
+			t = &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+			}
+		}
+
 		if option == nil {
 			return t
 		}
 
-		if t == nil {
-			t = &http.Transport{}
-		}
-
-		if option.TLSClientConfig == nil {
-			t.TLSClientConfig = &tls.Config{
-				InsecureSkipVerify: true,
-			}
-		} else {
+		if option.TLSClientConfig != nil {
 			t.TLSClientConfig = option.TLSClientConfig
 		}
 
