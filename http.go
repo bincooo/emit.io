@@ -510,7 +510,9 @@ func ToObject(response *http.Response, obj interface{}) (err error) {
 
 	encoding := response.Header.Get("Content-Encoding")
 	if encoding != "" && response.Proto == "JA3" {
-		requests.DecompressBody(&data, encoding)
+		if IsEncoding(data, encoding) {
+			requests.DecompressBody(&data, encoding)
+		}
 	}
 
 	err = json.Unmarshal(data, obj)
@@ -649,7 +651,9 @@ func TextResponse(response *http.Response) (value string) {
 }
 
 func Decode(data *[]byte, encoding string) {
-	if encoding != "" {
-		requests.DecompressBody(data, encoding)
+	if encoding != "" && data != nil {
+		if IsEncoding(*data, encoding) {
+			requests.DecompressBody(data, encoding)
+		}
 	}
 }
