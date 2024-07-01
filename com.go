@@ -71,3 +71,22 @@ var _range = [][]string{
 	{"13.80.0.0", "13.81.255.255"},       // Azure Cloud WestEurope 131070
 	{"20.73.0.0", "20.73.255.255"},       // Azure Cloud WestEurope 65534
 }
+
+func IsEncoding(data []byte, encoding string) bool {
+	switch encoding {
+	case "gzip":
+		return len(data) >= 2 &&
+			data[0] == 0x1F &&
+			data[1] == 0x8B
+	case "deflate":
+		// ？？？
+		return true
+	case "br":
+		return len(data) >= 3 &&
+			data[0] == 0xCE &&
+			data[1] == 0xB2 &&
+			data[2] == 0xCF
+	default:
+		return false
+	}
+}

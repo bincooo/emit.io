@@ -640,7 +640,9 @@ func TextResponse(response *http.Response) (value string) {
 
 	encoding := response.Header.Get("Content-Encoding")
 	if encoding != "" && response.Proto == "JA3" {
-		requests.DecompressBody(&bin, encoding)
+		if IsEncoding(bin, encoding) {
+			requests.DecompressBody(&bin, encoding)
+		}
 	}
 
 	return string(bin)
