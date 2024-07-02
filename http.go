@@ -235,7 +235,11 @@ func (c *Client) DoC(funs ...func(*http.Response) error) (*http.Response, error)
 	for _, condition := range funs {
 		err = condition(response)
 		if err != nil {
-			_ = response.Body.Close()
+			if response != nil {
+				value := TextResponse(response)
+				response.Body = io.NopCloser(bytes.NewBufferString(value))
+				_ = response.Body.Close()
+			}
 			return response, err
 		}
 	}
