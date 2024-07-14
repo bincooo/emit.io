@@ -347,6 +347,9 @@ func (c *Client) doJ() (*http.Response, error) {
 	request := furl.NewRequest()
 	request.Proxies = c.proxies
 	request.Ja3 = c.ja3
+	if c.session.timeout > 0 {
+		request.Timeout = c.session.timeout
+	}
 
 	if c.jar != nil {
 		var u *url.URL
