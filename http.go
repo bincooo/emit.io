@@ -108,6 +108,10 @@ func MergeSession(sessions ...*Session) (session *Session) {
 		if s.dialer != nil {
 			session.dialer = s.dialer
 		}
+
+		if s.timeout > 0 {
+			session.timeout = s.timeout
+		}
 	}
 	return
 }
