@@ -24,13 +24,21 @@ func TestRandIP(t *testing.T) {
 }
 
 func TestHTTP(t *testing.T) {
-	session := NewJa3Session(proxies, 180*time.Second)
+	session, err := NewJa3Session(proxies, 180)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	jar, err := NewCookieJar("https://claude.ai", "sessionKey="+cookies)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	response, err := ClientBuilder(session).
 		GET("https://claude.ai/api/organizations").
 		Ja3(ja3).
-		//CookieJar(jar).
-		Header("user-agent", userAgent).
-		Header("cookie", cookies).
+		CookieJar(jar).
+		Header("User-Agent", userAgent).
 		DoC(Status(http.StatusOK), IsJSON)
 	if err != nil {
 		t.Fatal(err)

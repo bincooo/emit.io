@@ -8,6 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/RomiChan/websocket"
+	fhttp "github.com/bogdanfinn/fhttp"
+	"github.com/bogdanfinn/tls-client"
+	"github.com/bogdanfinn/tls-client/profiles"
 	"golang.org/x/net/proxy"
 	"io"
 	"net"
@@ -16,12 +19,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"github.com/wangluozhe/requests"
-
-	fhttp "github.com/wangluozhe/chttp"
-	fcookiejar "github.com/wangluozhe/chttp/cookiejar"
-	furl "github.com/wangluozhe/requests/url"
 )
 
 type ConnectOption struct {
@@ -53,9 +50,9 @@ type Client struct {
 }
 
 type Session struct {
-	client   *http.Client
-	requests *requests.Session
-	dialer   *websocket.Dialer
+	client    *http.Client
+	tlsClient tls_client.HttpClient
+	dialer    *websocket.Dialer
 
 	timeout time.Duration // 给requests用的
 }
@@ -77,13 +74,25 @@ func NewDefaultSession(proxies string, option *ConnectOption, whites ...string) 
 	}, nil
 }
 
-func NewJa3Session(proxies string, timeout time.Duration) *Session {
-	session := requests.NewSession()
-	session.Proxies = proxies
-	return &Session{
-		requests: session,
-		timeout:  timeout,
+func NewJa3Session(proxies string, timeout int) (*Session, error) {
+	jar := tls_client.NewCookieJar()
+	options := []tls_client.HttpClientOption{
+		tls_client.WithProxyUrl(proxies),
+		tls_client.WithTimeoutSeconds(timeout),
+		tls_client.WithClientProfile(profiles.Chrome_112),
+		tls_client.WithNotFollowRedirects(),
+		tls_client.WithCookieJar(jar),
 	}
+
+	tlsClient, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), options...)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Session{
+		tlsClient: tlsClient,
+		timeout:   time.Duration(timeout) * time.Second,
+	}, nil
 }
 
 func MergeSession(sessions ...*Session) (session *Session) {
@@ -101,8 +110,8 @@ func MergeSession(sessions ...*Session) (session *Session) {
 			session.client = s.client
 		}
 
-		if s.requests != nil {
-			session.requests = s.requests
+		if s.tlsClient != nil {
+			session.tlsClient = s.tlsClient
 		}
 
 		if s.dialer != nil {
@@ -332,13 +341,6 @@ func (c *Client) doJ() (*http.Response, error) {
 		}
 	}
 
-	var session *requests.Session
-	if c.session != nil && c.session.requests != nil {
-		session = c.session.requests
-	} else {
-		session = requests.DefaultSession()
-	}
-
 	query := ""
 	if len(c.query) > 0 {
 		var slice []string
@@ -346,49 +348,6 @@ func (c *Client) doJ() (*http.Response, error) {
 			slice = append(slice, value)
 		}
 		query = "?" + strings.Join(slice, "&")
-	}
-
-	request := furl.NewRequest()
-	request.Proxies = c.proxies
-	request.Ja3 = c.ja3
-	if c.session.timeout > 0 {
-		request.Timeout = c.session.timeout
-	}
-
-	if c.jar != nil {
-		var u *url.URL
-
-		u, err := url.Parse(c.url)
-		if err != nil {
-			return nil, Error{-1, "Do", err}
-		}
-
-		jar, e := fcookiejar.New(nil)
-		if e != nil {
-			return nil, Error{-1, "Do", e}
-		}
-
-		cookies := c.jar.Cookies(u)
-		var newCookies []*fhttp.Cookie
-		for _, cookie := range cookies {
-			newCookies = append(newCookies, &fhttp.Cookie{
-				Name:  cookie.Name,
-				Value: cookie.Value,
-			})
-		}
-		jar.SetCookies(u, newCookies)
-		request.Cookies = jar
-	}
-
-	request.Headers = &fhttp.Header{}
-	isJ := false
-	for k, v := range c.headers {
-		if strings.ToLower(k) == "content-type" {
-			if strings.Contains(v, "application/json") {
-				isJ = true
-			}
-		}
-		request.Headers.Set(k, v)
 	}
 
 	if len(c.bytes) == 0 && c.buffer != nil {
@@ -399,34 +358,59 @@ func (c *Client) doJ() (*http.Response, error) {
 		c.bytes = data
 	}
 
-	if isJ {
-		var js map[string]interface{}
-		if err := json.Unmarshal(c.bytes, &js); err != nil {
-			return nil, Error{-1, "Do", err}
-		}
-
-		request.Json = js
-	} else {
-		request.Body = string(c.bytes)
-	}
-
-	response, err := session.Request(c.method, c.url+query, request)
+	request, err := fhttp.NewRequest(c.method, c.url+query, bytes.NewReader(c.bytes))
 	if err != nil {
 		return nil, Error{-1, "Do", err}
 	}
 
-	headers := response.Headers
+	if c.jar != nil {
+		var u *url.URL
+
+		u, err := url.Parse(c.url)
+		if err != nil {
+			return nil, Error{-1, "Do", err}
+		}
+
+		cookies := c.jar.Cookies(u)
+		var newCookies []*fhttp.Cookie
+		for _, cookie := range cookies {
+			newCookies = append(newCookies, &fhttp.Cookie{
+				Name:  cookie.Name,
+				Value: cookie.Value,
+			})
+		}
+		c.session.tlsClient.SetCookies(u, newCookies)
+	}
+
+	request.Header = fhttp.Header{}
+	for k, v := range c.headers {
+		request.Header.Set(k, v)
+	}
+
+	response, err := c.session.tlsClient.Do(request)
+	if err != nil {
+		return nil, Error{-1, "Do", err}
+	}
+
+	headers := response.Header
 	newHeaders := http.Header{}
 	for k, _ := range headers {
 		newHeaders[k] = headers[k]
 	}
 
 	r := http.Response{
-		Status:     http.StatusText(response.StatusCode),
-		StatusCode: response.StatusCode,
-		Proto:      "JA3",
-		Header:     newHeaders,
-		Body:       response.Body,
+		Status:           response.Status,
+		StatusCode:       response.StatusCode,
+		Proto:            response.Proto,
+		ProtoMajor:       response.ProtoMajor,
+		ProtoMinor:       response.ProtoMinor,
+		Header:           newHeaders,
+		Body:             response.Body,
+		ContentLength:    response.ContentLength,
+		TransferEncoding: response.TransferEncoding,
+		Close:            response.Close,
+		Uncompressed:     response.Uncompressed,
+		Trailer:          (map[string][]string)(response.Trailer),
 	}
 
 	return &r, err
@@ -519,12 +503,12 @@ func ToObject(response *http.Response, obj interface{}) (err error) {
 		return
 	}
 
-	encoding := response.Header.Get("Content-Encoding")
-	if encoding != "" && response.Proto == "JA3" {
-		if IsEncoding(data, encoding) {
-			requests.DecompressBody(&data, encoding)
-		}
-	}
+	//encoding := response.Header.Get("Content-Encoding")
+	//if encoding != "" && response.Proto == "JA3" {
+	//	if IsEncoding(data, encoding) {
+	//		requests.DecompressBody(&data, encoding)
+	//	}
+	//}
 
 	err = json.Unmarshal(data, obj)
 	return
@@ -651,20 +635,20 @@ func TextResponse(response *http.Response) (value string) {
 		return
 	}
 
-	encoding := response.Header.Get("Content-Encoding")
-	if encoding != "" && response.Proto == "JA3" {
-		if IsEncoding(bin, encoding) {
-			requests.DecompressBody(&bin, encoding)
-		}
-	}
+	//encoding := response.Header.Get("Content-Encoding")
+	//if encoding != "" && response.Proto == "JA3" {
+	//	if IsEncoding(bin, encoding) {
+	//		requests.DecompressBody(&bin, encoding)
+	//	}
+	//}
 
 	return string(bin)
 }
 
-func Decode(data *[]byte, encoding string) {
-	if encoding != "" && data != nil {
-		if IsEncoding(*data, encoding) {
-			requests.DecompressBody(data, encoding)
-		}
-	}
-}
+//func Decode(data *[]byte, encoding string) {
+//	if encoding != "" && data != nil {
+//		if IsEncoding(*data, encoding) {
+//			requests.DecompressBody(data, encoding)
+//		}
+//	}
+//}
