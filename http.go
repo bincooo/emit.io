@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -60,6 +61,9 @@ type Session struct {
 func (session *Session) IdleClose() {
 	if session.client != nil {
 		session.client.CloseIdleConnections()
+	}
+	if session.tlsClient != nil {
+		session.tlsClient.CloseIdleConnections()
 	}
 }
 
@@ -463,6 +467,13 @@ func client(proxies string, whites []string, option *ConnectOption) (*http.Clien
 								}
 							}
 						}
+						if proxiesUrl.User != nil {
+							if u := proxiesUrl.User.Username(); u != "" {
+								p, _ := proxiesUrl.User.Password()
+								u += ":" + p
+								r.Header.Set("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(u)))
+							}
+						}
 						return proxiesUrl, nil
 					},
 				}),
@@ -480,7 +491,14 @@ func client(proxies string, whites []string, option *ConnectOption) (*http.Clien
 							}
 						}
 
-						dialer, e := proxy.SOCKS5("tcp", proxiesUrl.Host, nil, proxy.Direct)
+						var au *proxy.Auth
+						if proxiesUrl.User != nil {
+							if u := proxiesUrl.User.Username(); u != "" {
+								p, _ := proxiesUrl.User.Password()
+								au = &proxy.Auth{User: u, Password: p}
+							}
+						}
+						dialer, e := proxy.SOCKS5("tcp", proxiesUrl.Host, au, proxy.Direct)
 						if e != nil {
 							return nil, e
 						}
