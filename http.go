@@ -83,7 +83,7 @@ func NewJa3Session(proxies string, timeout int) (*Session, error) {
 	options := []tls_client.HttpClientOption{
 		tls_client.WithProxyUrl(proxies),
 		tls_client.WithTimeoutSeconds(timeout),
-		tls_client.WithClientProfile(profiles.Chrome_112),
+		tls_client.WithClientProfile(profiles.Chrome_124),
 		tls_client.WithNotFollowRedirects(),
 		tls_client.WithCookieJar(jar),
 	}
