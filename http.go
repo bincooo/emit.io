@@ -78,12 +78,12 @@ func NewDefaultSession(proxies string, option *ConnectOption, whites ...string) 
 	}, nil
 }
 
-func NewJa3Session(proxies string, timeout int) (*Session, error) {
+func NewJa3Session(echoId profiles.ClientProfile, proxies string, timeout int) (*Session, error) {
 	jar := tls_client.NewCookieJar()
 	options := []tls_client.HttpClientOption{
 		tls_client.WithProxyUrl(proxies),
 		tls_client.WithTimeoutSeconds(timeout),
-		tls_client.WithClientProfile(profiles.Chrome_124),
+		tls_client.WithClientProfile(echoId),
 		tls_client.WithNotFollowRedirects(),
 		tls_client.WithCookieJar(jar),
 	}
