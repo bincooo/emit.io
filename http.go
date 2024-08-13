@@ -287,7 +287,7 @@ func (c *Client) Do() (*http.Response, error) {
 	} else {
 		cli, err := client(c.proxies, c.whites, c.option)
 		if err != nil {
-			return nil, Error{-1, "Do", err}
+			return nil, Error{-1, "Do", "", err}
 		}
 		session = cli
 	}
@@ -311,7 +311,7 @@ func (c *Client) Do() (*http.Response, error) {
 
 	request, err := http.NewRequest(c.method, c.url+query, c.buffer)
 	if err != nil {
-		return nil, Error{-1, "Do", err}
+		return nil, Error{-1, "Do", "", err}
 	}
 
 	h := request.Header
@@ -325,7 +325,7 @@ func (c *Client) Do() (*http.Response, error) {
 
 	response, err := session.Do(request)
 	if err != nil {
-		err = Error{-1, "Do", err}
+		err = Error{-1, "Do", "", err}
 	}
 
 	_ = request.Body.Close()
@@ -357,14 +357,14 @@ func (c *Client) doJ() (*http.Response, error) {
 	if len(c.bytes) == 0 && c.buffer != nil {
 		data, err := io.ReadAll(c.buffer)
 		if err != nil {
-			return nil, Error{-1, "Do", err}
+			return nil, Error{-1, "Do", "", err}
 		}
 		c.bytes = data
 	}
 
 	request, err := fhttp.NewRequest(c.method, c.url+query, bytes.NewReader(c.bytes))
 	if err != nil {
-		return nil, Error{-1, "Do", err}
+		return nil, Error{-1, "Do", "", err}
 	}
 
 	if c.jar != nil {
@@ -372,7 +372,7 @@ func (c *Client) doJ() (*http.Response, error) {
 
 		u, err := url.Parse(c.url)
 		if err != nil {
-			return nil, Error{-1, "Do", err}
+			return nil, Error{-1, "Do", "", err}
 		}
 
 		cookies := c.jar.Cookies(u)
@@ -393,7 +393,7 @@ func (c *Client) doJ() (*http.Response, error) {
 
 	response, err := c.session.tlsClient.Do(request)
 	if err != nil {
-		return nil, Error{-1, "Do", err}
+		return nil, Error{-1, "Do", "", err}
 	}
 
 	headers := response.Header
