@@ -22,6 +22,11 @@ import (
 	"time"
 )
 
+type Echo struct {
+	RandomTLSExtension bool
+	HelloID            profiles.ClientProfile
+}
+
 type ConnectOption struct {
 	TLSHandshakeTimeout   time.Duration
 	ResponseHeaderTimeout time.Duration
@@ -78,14 +83,21 @@ func NewDefaultSession(proxies string, option *ConnectOption, whites ...string) 
 	}, nil
 }
 
-func NewJa3Session(echoId profiles.ClientProfile, proxies string, timeout int) (*Session, error) {
+func NewJa3Session(echo Echo, proxies string, timeout int) (*Session, error) {
 	jar := tls_client.NewCookieJar()
 	options := []tls_client.HttpClientOption{
-		tls_client.WithProxyUrl(proxies),
 		tls_client.WithTimeoutSeconds(timeout),
-		tls_client.WithClientProfile(echoId),
+		tls_client.WithClientProfile(echo.HelloID),
 		tls_client.WithNotFollowRedirects(),
 		tls_client.WithCookieJar(jar),
+	}
+
+	if proxies != "" {
+		options = append(options, tls_client.WithProxyUrl(proxies))
+	}
+
+	if echo.RandomTLSExtension {
+		options = append(options, tls_client.WithRandomTLSExtensionOrder())
 	}
 
 	tlsClient, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), options...)

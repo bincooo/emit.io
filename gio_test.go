@@ -25,7 +25,7 @@ func TestRandIP(t *testing.T) {
 }
 
 func TestHTTP(t *testing.T) {
-	session, err := NewJa3Session(profiles.Chrome_124, proxies, 180)
+	session, err := NewJa3Session(Echo{false, profiles.Chrome_124}, proxies, 180)
 	if err != nil {
 		t.Fatal(err)
 	}
