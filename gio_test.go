@@ -16,7 +16,6 @@ const (
 	proxies     = "http://127.0.0.1:7890"
 	userAgent   = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0"
 	baseCookies = "_ga=GA1.1.1320014795.1715641484; _ga_K6D24EE9ED=GS1.1.1717132441.24.0.1717132441.0.0.0; _ga_R1FN4KJKJH=GS1.1.1717132441.38.0.1717132441.0.0.0"
-	ja3         = "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513-21,29-23-24,0"
 	cookies     = ""
 )
 
@@ -25,7 +24,10 @@ func TestRandIP(t *testing.T) {
 }
 
 func TestHTTP(t *testing.T) {
-	session, err := NewJa3Session(Echo{false, profiles.Chrome_124}, proxies, 180)
+	session, err := NewSession(proxies, nil, Ja3Helper(
+		Echo{false, profiles.Chrome_124},
+		180,
+	))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +39,7 @@ func TestHTTP(t *testing.T) {
 
 	response, err := ClientBuilder(session).
 		GET("https://claude.ai/api/organizations").
-		Ja3(ja3).
+		Ja3().
 		CookieJar(jar).
 		Header("User-Agent", userAgent).
 		DoC(Status(http.StatusOK), IsJSON)
@@ -68,25 +70,23 @@ func TestClaude3Haiku20240307(t *testing.T) {
 		},
 	}
 
-	session, err := NewDefaultSession(proxies, &ConnectOption{
-		IdleConnTimeout: 10 * time.Second,
-	})
+	session, err := NewSession(proxies, nil, IdleConnTimeoutHelper(10*time.Second))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	cookies := fetchCookies(ctx, session)
+	cookie := fetchCookies(ctx, session)
 	response, err := ClientBuilder(session).
 		Proxies(proxies).
 		Context(ctx).
 		Option(&ConnectOption{
-			IdleConnTimeout: 10 * time.Second,
+			idleConnTimeout: 10 * time.Second,
 		}).
 		POST("https://chat.lmsys.org/queue/join").
 		Header("Origin", "https://chat.lmsys.org").
 		Header("Referer", "https://chat.lmsys.org/").
 		Header("User-Agent", userAgent).
-		Header("cookie", cookies).
+		Header("cookie", cookie).
 		JHeader().
 		Body(obj).
 		DoS(http.StatusOK)
@@ -99,7 +99,7 @@ func TestClaude3Haiku20240307(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log(object)
-	cookie := GetCookies(response)
+	cookie = GetCookies(response)
 
 	ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -145,7 +145,7 @@ func TestClaude3Haiku20240307(t *testing.T) {
 			ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
-			response, err = ClientBuilder(nil).
+			response, err = ClientBuilder(session).
 				Proxies(proxies).
 				Context(ctx).
 				POST("https://chat.lmsys.org/queue/join").
@@ -183,7 +183,7 @@ func TestClaude3Haiku20240307(t *testing.T) {
 	ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	response, err = ClientBuilder(nil).
+	response, err = ClientBuilder(session).
 		Proxies(proxies).
 		Context(ctx).
 		GET("https://chat.lmsys.org/queue/data").
@@ -217,7 +217,12 @@ func TestClaude3Haiku20240307(t *testing.T) {
 func TestGioSDXL(t *testing.T) {
 	p := "1girl"
 	n := ""
-	conn, _, err := SocketBuilder(nil).
+	session, err := NewSession(proxies, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	conn, _, err := SocketBuilder(session).
 		Proxies(proxies).
 		URL("wss://tonyassi-text-to-image-sdxl.hf.space/queue/join").
 		Header("User-Agent", userAgent).

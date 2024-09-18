@@ -14,13 +14,13 @@ import (
 )
 
 type Conn struct {
-	url     string
-	proxies string
-	whites  []string
-	headers map[string]string
-	query   []string
-	err     error
-	ctx     context.Context
+	url         string
+	proxies     string
+	fetchWithes func() []string
+	headers     map[string]string
+	query       []string
+	err         error
+	ctx         context.Context
 
 	jar http.CookieJar
 
@@ -28,21 +28,12 @@ type Conn struct {
 	option  *ConnectOption
 }
 
-func NewSocketSession(proxies string, option *ConnectOption, whites ...string) (*Session, error) {
-	dialer, err := socket(proxies, whites, option)
-	if err != nil {
-		return nil, err
-	}
-	return &Session{
-		dialer: dialer,
-	}, nil
-}
-
 func SocketBuilder(session *Session) *Conn {
 	return &Conn{
-		query:   make([]string, 0),
-		headers: make(map[string]string),
-		session: session,
+		query:       make([]string, 0),
+		headers:     make(map[string]string),
+		fetchWithes: func() []string { return nil },
+		session:     session,
 	}
 }
 
@@ -53,7 +44,9 @@ func (conn *Conn) URL(url string) *Conn {
 
 func (conn *Conn) Proxies(proxies string, whites ...string) *Conn {
 	conn.proxies = proxies
-	conn.whites = whites
+	conn.fetchWithes = func() []string {
+		return whites
+	}
 	return conn
 }
 
@@ -135,7 +128,7 @@ func (conn *Conn) Do() (*websocket.Conn, *http.Response, error) {
 		dialer = conn.session.dialer
 	} else {
 		var err error
-		dialer, err = socket(conn.proxies, conn.whites, conn.option)
+		dialer, err = socket(conn.proxies, conn.fetchWithes, conn.option)
 		if err != nil {
 			err = Error{-1, "Do", "", err}
 		}
@@ -161,7 +154,7 @@ func (conn *Conn) Do() (*websocket.Conn, *http.Response, error) {
 	return c, response, err
 }
 
-func socket(proxies string, whites []string, opts *ConnectOption) (*websocket.Dialer, error) {
+func socket(proxies string, fetchWithes func() []string, opts *ConnectOption) (*websocket.Dialer, error) {
 	dialer := websocket.DefaultDialer
 	if proxies != "" {
 		pu, err := url.Parse(proxies)
@@ -170,15 +163,15 @@ func socket(proxies string, whites []string, opts *ConnectOption) (*websocket.Di
 		}
 
 		handshakeTimeout := 45 * time.Second
-		if opts != nil && opts.TLSHandshakeTimeout > 0 {
-			handshakeTimeout = opts.TLSHandshakeTimeout
+		if opts != nil && opts.tlsHandshakeTimeout > 0 {
+			handshakeTimeout = opts.tlsHandshakeTimeout
 		}
 
 		if pu.Scheme == "http" || pu.Scheme == "https" {
 			dialer = &websocket.Dialer{
 				Proxy: func(r *http.Request) (*url.URL, error) {
 					if r.URL != nil {
-						for _, w := range whites {
+						for _, w := range fetchWithes() {
 							if strings.HasPrefix(r.URL.Host, w) {
 								return r.URL, nil
 							}
@@ -190,10 +183,10 @@ func socket(proxies string, whites []string, opts *ConnectOption) (*websocket.Di
 				NetDialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 					d := &net.Dialer{}
 					if opts != nil {
-						if opts.IdleConnTimeout > 0 {
-							d.KeepAlive = opts.IdleConnTimeout
+						if opts.idleConnTimeout > 0 {
+							d.KeepAlive = opts.idleConnTimeout
 						}
-						if opts.DisableKeepAlive {
+						if opts.disableKeepAlive {
 							d.KeepAlive = 0
 						}
 					}
@@ -205,7 +198,7 @@ func socket(proxies string, whites []string, opts *ConnectOption) (*websocket.Di
 		if pu.Scheme == "socks5" {
 			dialer = &websocket.Dialer{
 				NetDialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-					for _, w := range whites {
+					for _, w := range fetchWithes() {
 						if strings.HasPrefix(addr, w) {
 							c, e := proxy.Direct.Dial(network, addr)
 							if e != nil {
@@ -213,10 +206,10 @@ func socket(proxies string, whites []string, opts *ConnectOption) (*websocket.Di
 							}
 							conn := c.(*net.TCPConn)
 							if opts != nil {
-								if opts.IdleConnTimeout > 0 {
-									_ = conn.SetKeepAlivePeriod(opts.IdleConnTimeout)
+								if opts.idleConnTimeout > 0 {
+									_ = conn.SetKeepAlivePeriod(opts.idleConnTimeout)
 								}
-								if opts.DisableKeepAlive {
+								if opts.disableKeepAlive {
 									_ = conn.SetKeepAlive(false)
 								}
 							}
@@ -235,10 +228,10 @@ func socket(proxies string, whites []string, opts *ConnectOption) (*websocket.Di
 
 					conn := c.(*net.TCPConn)
 					if opts != nil {
-						if opts.IdleConnTimeout > 0 {
-							_ = conn.SetKeepAlivePeriod(opts.IdleConnTimeout)
+						if opts.idleConnTimeout > 0 {
+							_ = conn.SetKeepAlivePeriod(opts.idleConnTimeout)
 						}
-						if opts.DisableKeepAlive {
+						if opts.disableKeepAlive {
 							_ = conn.SetKeepAlive(false)
 						}
 					}

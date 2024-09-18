@@ -28,39 +28,174 @@ type Echo struct {
 }
 
 type ConnectOption struct {
-	TLSHandshakeTimeout   time.Duration
-	ResponseHeaderTimeout time.Duration
-	ExpectContinueTimeout time.Duration
-	IdleConnTimeout       time.Duration
-	DisableKeepAlive      bool
-	MaxIdleConnects       int
+	tlsHandshakeTimeout   time.Duration
+	responseHeaderTimeout time.Duration
+	expectContinueTimeout time.Duration
+	idleConnTimeout       time.Duration
+	disableKeepAlive      bool
+	maxIdleConnects       int
 
-	TLSClientConfig *tls.Config
+	tlsConfig *tls.Config
 }
 
 type Client struct {
-	url     string
-	method  string
-	proxies string
-	headers map[string]string
-	query   []string
-	bytes   []byte
-	err     error
-	ctx     context.Context
-	buffer  io.Reader
-	jar     http.CookieJar
-	ja3     string
-	session *Session
-	option  *ConnectOption
-	whites  []string
+	url         string
+	method      string
+	proxies     string
+	headers     map[string]string
+	query       []string
+	bytes       []byte
+	err         error
+	ctx         context.Context
+	buffer      io.Reader
+	jar         http.CookieJar
+	ja3         string
+	session     *Session
+	option      *ConnectOption
+	fetchWithes func() []string
 }
 
 type Session struct {
+	opts *ConnectOption
+
 	client    *http.Client
 	tlsClient tls_client.HttpClient
 	dialer    *websocket.Dialer
+}
 
-	timeout time.Duration // 给requests用的
+type OptionHelper = func(string, *Session) error
+
+func TLSHandshakeTimeoutHelper(timeout time.Duration) OptionHelper {
+	return func(_ string, session *Session) error {
+		if session.opts == nil {
+			session.opts = &ConnectOption{}
+		}
+		session.opts.tlsHandshakeTimeout = timeout
+		return nil
+	}
+}
+
+func ResponseHeaderTimeoutHelper(timeout time.Duration) OptionHelper {
+	return func(_ string, session *Session) error {
+		if session.opts == nil {
+			session.opts = &ConnectOption{}
+		}
+		session.opts.responseHeaderTimeout = timeout
+		return nil
+	}
+}
+
+func ExpectContinueTimeoutHelper(timeout time.Duration) OptionHelper {
+	return func(_ string, session *Session) error {
+		if session.opts == nil {
+			session.opts = &ConnectOption{}
+		}
+		session.opts.expectContinueTimeout = timeout
+		return nil
+	}
+}
+
+func IdleConnTimeoutHelper(timeout time.Duration) OptionHelper {
+	return func(_ string, session *Session) error {
+		if session.opts == nil {
+			session.opts = &ConnectOption{}
+		}
+		session.opts.idleConnTimeout = timeout
+		return nil
+	}
+}
+
+func DisableKeepAliveHelper(flag bool) OptionHelper {
+	return func(_ string, session *Session) error {
+		if session.opts == nil {
+			session.opts = &ConnectOption{}
+		}
+		session.opts.disableKeepAlive = flag
+		return nil
+	}
+}
+
+func MaxIdleConnectsHelper(count int) OptionHelper {
+	return func(_ string, session *Session) error {
+		if session.opts == nil {
+			session.opts = &ConnectOption{}
+		}
+		session.opts.maxIdleConnects = count
+		return nil
+	}
+}
+
+func TLSConfigHelper(config *tls.Config) OptionHelper {
+	return func(_ string, session *Session) error {
+		if config == nil {
+			if session.opts == nil {
+				session.opts = &ConnectOption{}
+			}
+			session.opts.tlsConfig = config
+		}
+		return nil
+	}
+}
+
+func Ja3Helper(echo Echo, timeout int) OptionHelper {
+	return func(proxies string, session *Session) error {
+		jar := tls_client.NewCookieJar()
+		options := []tls_client.HttpClientOption{
+			tls_client.WithTimeoutSeconds(timeout),
+			tls_client.WithClientProfile(echo.HelloID),
+			tls_client.WithNotFollowRedirects(),
+			tls_client.WithCookieJar(jar),
+		}
+
+		if proxies != "" {
+			options = append(options, tls_client.WithProxyUrl(proxies))
+		}
+
+		if echo.RandomTLSExtension {
+			options = append(options, tls_client.WithRandomTLSExtensionOrder())
+		}
+
+		c, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), options...)
+		if err != nil {
+			return err
+		}
+
+		session.tlsClient = c
+		return nil
+	}
+}
+
+func SimpleWithes(withes ...string) func() []string {
+	return func() []string {
+		return withes
+	}
+}
+
+func NewSession(proxies string, fetchWithes func() []string, opts ...OptionHelper) (session *Session, err error) {
+	session = &Session{}
+	for _, exec := range opts {
+		if err = exec(proxies, session); err != nil {
+			return
+		}
+	}
+
+	if fetchWithes == nil {
+		fetchWithes = func() []string { return nil }
+	}
+
+	c, err := client(proxies, fetchWithes, session.opts)
+	if err != nil {
+		return
+	}
+	session.client = c
+
+	dialer, err := socket(proxies, fetchWithes, session.opts)
+	if err != nil {
+		return
+	}
+	session.dialer = dialer
+
+	return
 }
 
 func (session *Session) IdleClose() {
@@ -72,81 +207,13 @@ func (session *Session) IdleClose() {
 	}
 }
 
-func NewDefaultSession(proxies string, option *ConnectOption, whites ...string) (*Session, error) {
-	cli, err := client(proxies, whites, option)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Session{
-		client: cli,
-	}, nil
-}
-
-func NewJa3Session(echo Echo, proxies string, timeout int) (*Session, error) {
-	jar := tls_client.NewCookieJar()
-	options := []tls_client.HttpClientOption{
-		tls_client.WithTimeoutSeconds(timeout),
-		tls_client.WithClientProfile(echo.HelloID),
-		tls_client.WithNotFollowRedirects(),
-		tls_client.WithCookieJar(jar),
-	}
-
-	if proxies != "" {
-		options = append(options, tls_client.WithProxyUrl(proxies))
-	}
-
-	if echo.RandomTLSExtension {
-		options = append(options, tls_client.WithRandomTLSExtensionOrder())
-	}
-
-	tlsClient, err := tls_client.NewHttpClient(tls_client.NewNoopLogger(), options...)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Session{
-		tlsClient: tlsClient,
-		timeout:   time.Duration(timeout) * time.Second,
-	}, nil
-}
-
-func MergeSession(sessions ...*Session) (session *Session) {
-	for _, s := range sessions {
-		if s == nil {
-			continue
-		}
-
-		if session == nil {
-			session = s
-			continue
-		}
-
-		if s.client != nil {
-			session.client = s.client
-		}
-
-		if s.tlsClient != nil {
-			session.tlsClient = s.tlsClient
-		}
-
-		if s.dialer != nil {
-			session.dialer = s.dialer
-		}
-
-		if s.timeout > 0 {
-			session.timeout = s.timeout
-		}
-	}
-	return
-}
-
 func ClientBuilder(session *Session) *Client {
 	return &Client{
-		method:  http.MethodGet,
-		query:   make([]string, 0),
-		headers: make(map[string]string),
-		session: session,
+		method:      http.MethodGet,
+		query:       make([]string, 0),
+		headers:     make(map[string]string),
+		fetchWithes: func() []string { return nil },
+		session:     session,
 	}
 }
 
@@ -186,7 +253,9 @@ func (c *Client) DELETE(url string) *Client {
 
 func (c *Client) Proxies(proxies string, whites ...string) *Client {
 	c.proxies = proxies
-	c.whites = whites
+	c.fetchWithes = func() []string {
+		return whites
+	}
 	return c
 }
 
@@ -205,8 +274,8 @@ func (c *Client) Option(opt *ConnectOption) *Client {
 		return c
 	}
 
-	if opt.TLSClientConfig == nil && c.option != nil {
-		opt.TLSClientConfig = c.option.TLSClientConfig
+	if opt.tlsConfig == nil && c.option != nil {
+		opt.tlsConfig = c.option.tlsConfig
 	}
 
 	c.option = opt
@@ -228,8 +297,8 @@ func (c *Client) Query(key, value string) *Client {
 	return c
 }
 
-func (c *Client) Ja3(ja3 string) *Client {
-	c.ja3 = ja3
+func (c *Client) Ja3() *Client {
+	c.ja3 = "yes"
 	return c
 }
 
@@ -297,7 +366,7 @@ func (c *Client) Do() (*http.Response, error) {
 	if c.session != nil && c.session.client != nil {
 		session = c.session.client
 	} else {
-		cli, err := client(c.proxies, c.whites, c.option)
+		cli, err := client(c.proxies, c.fetchWithes, c.option)
 		if err != nil {
 			return nil, Error{-1, "Do", "", err}
 		}
@@ -432,7 +501,7 @@ func (c *Client) doJ() (*http.Response, error) {
 	return &r, err
 }
 
-func client(proxies string, whites []string, option *ConnectOption) (*http.Client, error) {
+func client(proxies string, fetchWithes func() []string, option *ConnectOption) (*http.Client, error) {
 	c := http.DefaultClient
 
 	newTransport := func(t *http.Transport) http.RoundTripper {
@@ -448,16 +517,16 @@ func client(proxies string, whites []string, option *ConnectOption) (*http.Clien
 			return t
 		}
 
-		if option.TLSClientConfig != nil {
-			t.TLSClientConfig = option.TLSClientConfig
+		if option.tlsConfig != nil {
+			t.TLSClientConfig = option.tlsConfig
 		}
 
-		t.TLSHandshakeTimeout = option.TLSHandshakeTimeout
-		t.ResponseHeaderTimeout = option.ResponseHeaderTimeout
-		t.ExpectContinueTimeout = option.ExpectContinueTimeout
-		t.IdleConnTimeout = option.IdleConnTimeout
-		t.MaxIdleConns = option.MaxIdleConnects
-		t.DisableKeepAlives = option.DisableKeepAlive
+		t.TLSHandshakeTimeout = option.tlsHandshakeTimeout
+		t.ResponseHeaderTimeout = option.responseHeaderTimeout
+		t.ExpectContinueTimeout = option.expectContinueTimeout
+		t.IdleConnTimeout = option.idleConnTimeout
+		t.MaxIdleConns = option.maxIdleConnects
+		t.DisableKeepAlives = option.disableKeepAlive
 
 		return t
 	}
@@ -473,7 +542,7 @@ func client(proxies string, whites []string, option *ConnectOption) (*http.Clien
 				Transport: newTransport(&http.Transport{
 					Proxy: func(r *http.Request) (*url.URL, error) {
 						if r.URL != nil {
-							for _, w := range whites {
+							for _, w := range fetchWithes() {
 								if strings.HasPrefix(r.URL.Host, w) {
 									return r.URL, nil
 								}
@@ -497,7 +566,7 @@ func client(proxies string, whites []string, option *ConnectOption) (*http.Clien
 			c = &http.Client{
 				Transport: newTransport(&http.Transport{
 					DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-						for _, w := range whites {
+						for _, w := range fetchWithes() {
 							if strings.HasPrefix(addr, w) {
 								return proxy.Direct.Dial(network, addr)
 							}
