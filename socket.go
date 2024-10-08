@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-type Conn struct {
+type ConnBuilder struct {
 	url         string
 	proxies     string
 	fetchWithes func() []string
@@ -28,8 +28,8 @@ type Conn struct {
 	option  *ConnectOption
 }
 
-func SocketBuilder(session *Session) *Conn {
-	return &Conn{
+func SocketBuilder(session *Session) *ConnBuilder {
+	return &ConnBuilder{
 		query:       make([]string, 0),
 		headers:     make(map[string]string),
 		fetchWithes: func() []string { return nil },
@@ -37,12 +37,12 @@ func SocketBuilder(session *Session) *Conn {
 	}
 }
 
-func (conn *Conn) URL(url string) *Conn {
+func (conn *ConnBuilder) URL(url string) *ConnBuilder {
 	conn.url = url
 	return conn
 }
 
-func (conn *Conn) Proxies(proxies string, whites ...string) *Conn {
+func (conn *ConnBuilder) Proxies(proxies string, whites ...string) *ConnBuilder {
 	conn.proxies = proxies
 	conn.fetchWithes = func() []string {
 		return whites
@@ -50,17 +50,17 @@ func (conn *Conn) Proxies(proxies string, whites ...string) *Conn {
 	return conn
 }
 
-func (conn *Conn) Context(ctx context.Context) *Conn {
+func (conn *ConnBuilder) Context(ctx context.Context) *ConnBuilder {
 	conn.ctx = ctx
 	return conn
 }
 
-func (conn *Conn) CookieJar(jar http.CookieJar) *Conn {
+func (conn *ConnBuilder) CookieJar(jar http.CookieJar) *ConnBuilder {
 	conn.jar = jar
 	return conn
 }
 
-func (conn *Conn) Option(opt *ConnectOption) *Conn {
+func (conn *ConnBuilder) Option(opt *ConnectOption) *ConnBuilder {
 	if opt == nil {
 		return conn
 	}
@@ -69,21 +69,21 @@ func (conn *Conn) Option(opt *ConnectOption) *Conn {
 	return conn
 }
 
-func (conn *Conn) Header(key, value string) *Conn {
+func (conn *ConnBuilder) Header(key, value string) *ConnBuilder {
 	conn.headers[key] = value
 	return conn
 }
 
-func (conn *Conn) Query(key, value string) *Conn {
+func (conn *ConnBuilder) Query(key, value string) *ConnBuilder {
 	conn.query = append(conn.query, fmt.Sprintf("%s=%s", key, value))
 	return conn
 }
 
-func (conn *Conn) DoS(status int) (*websocket.Conn, *http.Response, error) {
+func (conn *ConnBuilder) DoS(status int) (*websocket.Conn, *http.Response, error) {
 	return conn.DoC(Status(status))
 }
 
-func (conn *Conn) DoC(funs ...func(*http.Response) error) (*websocket.Conn, *http.Response, error) {
+func (conn *ConnBuilder) DoC(funs ...func(*http.Response) error) (*websocket.Conn, *http.Response, error) {
 	c, response, err := conn.Do()
 	if err != nil {
 		return c, response, err
@@ -100,7 +100,7 @@ func (conn *Conn) DoC(funs ...func(*http.Response) error) (*websocket.Conn, *htt
 	return c, response, nil
 }
 
-func (conn *Conn) Do() (*websocket.Conn, *http.Response, error) {
+func (conn *ConnBuilder) Do() (*websocket.Conn, *http.Response, error) {
 	if conn.err != nil {
 		return nil, nil, Error{-1, "Do", "", conn.err}
 	}

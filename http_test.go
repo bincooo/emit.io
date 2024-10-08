@@ -42,7 +42,7 @@ func TestJa3(t *testing.T) {
 }
 
 func TestHttp(t *testing.T) {
-	session, err := NewSession(proxies, SimpleWithes("127.0.0.1"))
+	session, err := NewSession(proxies, WarpI("127.0.0.1"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,6 +50,32 @@ func TestHttp(t *testing.T) {
 	response, err := ClientBuilder(session).
 		Context(context.Background()).
 		GET("https://tls.browserleaks.com/json").
+		Header("user-agent", userAgent).
+		DoS(http.StatusOK)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer response.Body.Close()
+	obj, err := ToMap(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Logf("ja3: %s", obj["ja3_text"])
+	t.Logf("ja3_hash: %s", obj["ja3_hash"])
+	t.Logf("user_agent: %s", obj["user_agent"])
+}
+
+func TestEncoding(t *testing.T) {
+	session, err := NewSession(proxies, WarpI("127.0.0.1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := ClientBuilder(session).
+		Context(context.Background()).
+		GET("https://claude.ai/_next/static/css/42239112c73b3fbe.css").
 		Header("user-agent", userAgent).
 		DoS(http.StatusOK)
 	if err != nil {

@@ -2,6 +2,8 @@ package emit
 
 import (
 	"bytes"
+	"compress/flate"
+	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"encoding/base64"
@@ -9,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/RomiChan/websocket"
+	"github.com/andybalholm/brotli"
 	fhttp "github.com/bogdanfinn/fhttp"
 	"github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
@@ -18,6 +21,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 )
@@ -38,7 +42,7 @@ type ConnectOption struct {
 	tlsConfig *tls.Config
 }
 
-type Client struct {
+type Builder struct {
 	url         string
 	method      string
 	proxies     string
@@ -53,6 +57,8 @@ type Client struct {
 	session     *Session
 	option      *ConnectOption
 	fetchWithes func() []string
+
+	encoding []string
 }
 
 type Session struct {
@@ -64,6 +70,11 @@ type Session struct {
 }
 
 type OptionHelper = func(string, *Session) error
+
+type readCloser struct {
+	io.Reader
+	io.Closer
+}
 
 func TLSHandshakeTimeoutHelper(timeout time.Duration) OptionHelper {
 	return func(_ string, session *Session) error {
@@ -165,9 +176,9 @@ func Ja3Helper(echo Echo, timeout int) OptionHelper {
 	}
 }
 
-func SimpleWithes(withes ...string) func() []string {
+func WarpI(ips ...string) func() []string {
 	return func() []string {
-		return withes
+		return ips
 	}
 }
 
@@ -207,8 +218,8 @@ func (session *Session) IdleClose() {
 	}
 }
 
-func ClientBuilder(session *Session) *Client {
-	return &Client{
+func ClientBuilder(session *Session) *Builder {
+	return &Builder{
 		method:      http.MethodGet,
 		query:       make([]string, 0),
 		headers:     make(map[string]string),
@@ -217,41 +228,41 @@ func ClientBuilder(session *Session) *Client {
 	}
 }
 
-func (c *Client) URL(url string) *Client {
+func (c *Builder) URL(url string) *Builder {
 	c.url = url
 	return c
 }
 
-func (c *Client) Method(method string) *Client {
+func (c *Builder) Method(method string) *Builder {
 	c.method = method
 	return c
 }
 
-func (c *Client) GET(url string) *Client {
+func (c *Builder) GET(url string) *Builder {
 	c.url = url
 	c.method = http.MethodGet
 	return c
 }
 
-func (c *Client) POST(url string) *Client {
+func (c *Builder) POST(url string) *Builder {
 	c.url = url
 	c.method = http.MethodPost
 	return c
 }
 
-func (c *Client) PUT(url string) *Client {
+func (c *Builder) PUT(url string) *Builder {
 	c.url = url
 	c.method = http.MethodPut
 	return c
 }
 
-func (c *Client) DELETE(url string) *Client {
+func (c *Builder) DELETE(url string) *Builder {
 	c.url = url
 	c.method = http.MethodDelete
 	return c
 }
 
-func (c *Client) Proxies(proxies string, whites ...string) *Client {
+func (c *Builder) Proxies(proxies string, whites ...string) *Builder {
 	c.proxies = proxies
 	c.fetchWithes = func() []string {
 		return whites
@@ -259,17 +270,17 @@ func (c *Client) Proxies(proxies string, whites ...string) *Client {
 	return c
 }
 
-func (c *Client) Context(ctx context.Context) *Client {
+func (c *Builder) Context(ctx context.Context) *Builder {
 	c.ctx = ctx
 	return c
 }
 
-func (c *Client) CookieJar(jar http.CookieJar) *Client {
+func (c *Builder) CookieJar(jar http.CookieJar) *Builder {
 	c.jar = jar
 	return c
 }
 
-func (c *Client) Option(opt *ConnectOption) *Client {
+func (c *Builder) Option(opt *ConnectOption) *Builder {
 	if opt == nil {
 		return c
 	}
@@ -282,27 +293,27 @@ func (c *Client) Option(opt *ConnectOption) *Client {
 	return c
 }
 
-func (c *Client) JHeader() *Client {
+func (c *Builder) JHeader() *Builder {
 	c.headers["content-type"] = "application/json"
 	return c
 }
 
-func (c *Client) Header(key, value string) *Client {
+func (c *Builder) Header(key, value string) *Builder {
 	c.headers[key] = value
 	return c
 }
 
-func (c *Client) Query(key, value string) *Client {
+func (c *Builder) Query(key, value string) *Builder {
 	c.query = append(c.query, fmt.Sprintf("%s=%s", key, value))
 	return c
 }
 
-func (c *Client) Ja3() *Client {
+func (c *Builder) Ja3() *Builder {
 	c.ja3 = "yes"
 	return c
 }
 
-func (c *Client) Body(payload interface{}) *Client {
+func (c *Builder) Body(payload interface{}) *Builder {
 	if c.err != nil {
 		return c
 	}
@@ -310,24 +321,50 @@ func (c *Client) Body(payload interface{}) *Client {
 	return c
 }
 
-func (c *Client) Bytes(data []byte) *Client {
+func (c *Builder) Bytes(data []byte) *Builder {
 	c.bytes = data
 	return c
 }
 
-func (c *Client) Buffer(buffer io.Reader) *Client {
+func (c *Builder) Buffer(buffer io.Reader) *Builder {
 	c.buffer = buffer
 	return c
 }
 
-func (c *Client) DoS(status int) (*http.Response, error) {
+func (c *Builder) Encoding(encoding ...string) *Builder {
+	c.encoding = append(c.encoding, encoding...)
+	return c
+}
+
+func (c *Builder) DoS(status int) (*http.Response, error) {
 	return c.DoC(Status(status))
 }
 
-func (c *Client) DoC(funs ...func(*http.Response) error) (*http.Response, error) {
+func (c *Builder) DoC(funs ...func(*http.Response) error) (*http.Response, error) {
 	response, err := c.Do()
 	if err != nil {
 		return response, err
+	}
+
+	if len(c.encoding) > 0 {
+		encoding := response.Header.Get("Content-Encoding")
+		switch encoding {
+		case "gzip":
+			if slices.Contains(c.encoding, "gzip") {
+				response.Body, err = gzip.NewReader(response.Body)
+				if err != nil {
+					return response, err
+				}
+			}
+		case "deflate":
+			if slices.Contains(c.encoding, "deflate") {
+				response.Body = flate.NewReader(response.Body)
+			}
+		case "br":
+			if slices.Contains(c.encoding, "br") {
+				response.Body = &readCloser{brotli.NewReader(response.Body), response.Body}
+			}
+		}
 	}
 
 	for _, condition := range funs {
@@ -345,7 +382,7 @@ func (c *Client) DoC(funs ...func(*http.Response) error) (*http.Response, error)
 	return response, nil
 }
 
-func (c *Client) Do() (*http.Response, error) {
+func (c *Builder) Do() (*http.Response, error) {
 	if c.err != nil {
 		return nil, c.err
 	}
@@ -413,7 +450,7 @@ func (c *Client) Do() (*http.Response, error) {
 	return response, err
 }
 
-func (c *Client) doJ() (*http.Response, error) {
+func (c *Builder) doJ() (*http.Response, error) {
 	if c.err != nil {
 		return nil, c.err
 	}
