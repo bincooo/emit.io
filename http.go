@@ -3,7 +3,6 @@ package emit
 import (
 	"bytes"
 	"compress/flate"
-	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"encoding/base64"
@@ -430,7 +429,7 @@ func (c *Builder) Do() (*http.Response, error) {
 		switch encoding {
 		case "gzip":
 			if slices.Contains(c.encoding, "gzip") {
-				response.Body, err = gzip.NewReader(response.Body)
+				response.Body, err = decodeGZip(response.Body)
 				if err != nil {
 					return response, Error{-1, "Do decoding/gzip", "", err}
 				}
@@ -488,7 +487,7 @@ func (c *Builder) doJ() (*http.Response, error) {
 	if c.jar != nil {
 		var u *url.URL
 
-		u, err := url.Parse(c.url)
+		u, err = url.Parse(c.url)
 		if err != nil {
 			return nil, Error{-1, "Do", "", err}
 		}

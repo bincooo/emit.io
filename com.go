@@ -1,6 +1,9 @@
 package emit
 
 import (
+	"bytes"
+	"compress/gzip"
+	"io"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -89,4 +92,18 @@ func IsEncoding(data []byte, encoding string) bool {
 	default:
 		return false
 	}
+}
+
+func decodeGZip(closer io.ReadCloser) (io.ReadCloser, error) {
+	if closer == nil {
+		return closer, nil
+	}
+
+	buf := new(bytes.Buffer)
+	_, err := io.Copy(buf, closer)
+	if err != nil {
+		return nil, err
+	}
+
+	return gzip.NewReader(buf)
 }
