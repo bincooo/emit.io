@@ -346,27 +346,6 @@ func (c *Builder) DoC(funs ...func(*http.Response) error) (*http.Response, error
 		return response, err
 	}
 
-	if len(c.encoding) > 0 {
-		encoding := response.Header.Get("Content-Encoding")
-		switch encoding {
-		case "gzip":
-			if slices.Contains(c.encoding, "gzip") {
-				response.Body, err = gzip.NewReader(response.Body)
-				if err != nil {
-					return response, err
-				}
-			}
-		case "deflate":
-			if slices.Contains(c.encoding, "deflate") {
-				response.Body = flate.NewReader(response.Body)
-			}
-		case "br":
-			if slices.Contains(c.encoding, "br") {
-				response.Body = &readCloser{brotli.NewReader(response.Body), response.Body}
-			}
-		}
-	}
-
 	for _, condition := range funs {
 		err = condition(response)
 		if err != nil {
@@ -444,6 +423,27 @@ func (c *Builder) Do() (*http.Response, error) {
 	response, err := session.Do(request)
 	if err != nil {
 		err = Error{-1, "Do", "", err}
+	}
+
+	if len(c.encoding) > 0 {
+		encoding := response.Header.Get("Content-Encoding")
+		switch encoding {
+		case "gzip":
+			if slices.Contains(c.encoding, "gzip") {
+				response.Body, err = gzip.NewReader(response.Body)
+				if err != nil {
+					return response, Error{-1, "Do decoding/gzip", "", err}
+				}
+			}
+		case "deflate":
+			if slices.Contains(c.encoding, "deflate") {
+				response.Body = flate.NewReader(response.Body)
+			}
+		case "br":
+			if slices.Contains(c.encoding, "br") {
+				response.Body = &readCloser{brotli.NewReader(response.Body), response.Body}
+			}
+		}
 	}
 
 	_ = request.Body.Close()
