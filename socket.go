@@ -70,11 +70,17 @@ func (conn *ConnBuilder) Option(opt *ConnectOption) *ConnBuilder {
 }
 
 func (conn *ConnBuilder) Header(key, value string) *ConnBuilder {
+	if key == "" {
+		return conn
+	}
 	conn.headers[key] = value
 	return conn
 }
 
 func (conn *ConnBuilder) Query(key, value string) *ConnBuilder {
+	if key == "" {
+		return conn
+	}
 	conn.query = append(conn.query, fmt.Sprintf("%s=%s", key, value))
 	return conn
 }
@@ -154,7 +160,7 @@ func (conn *ConnBuilder) Do() (*websocket.Conn, *http.Response, error) {
 	return c, response, err
 }
 
-func socket(proxies string, fetchWithes func() []string, opts *ConnectOption) (*websocket.Dialer, error) {
+func socket(proxies string, withes func() []string, opts *ConnectOption) (*websocket.Dialer, error) {
 	dialer := websocket.DefaultDialer
 	if proxies != "" {
 		pu, err := url.Parse(proxies)
@@ -171,7 +177,7 @@ func socket(proxies string, fetchWithes func() []string, opts *ConnectOption) (*
 			dialer = &websocket.Dialer{
 				Proxy: func(r *http.Request) (*url.URL, error) {
 					if r.URL != nil {
-						for _, w := range fetchWithes() {
+						for _, w := range withes() {
 							if strings.HasPrefix(r.URL.Host, w) {
 								return r.URL, nil
 							}
@@ -198,7 +204,7 @@ func socket(proxies string, fetchWithes func() []string, opts *ConnectOption) (*
 		if pu.Scheme == "socks5" {
 			dialer = &websocket.Dialer{
 				NetDialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-					for _, w := range fetchWithes() {
+					for _, w := range withes() {
 						if strings.HasPrefix(addr, w) {
 							c, e := proxy.Direct.Dial(network, addr)
 							if e != nil {

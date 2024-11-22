@@ -25,6 +25,8 @@ import (
 	"time"
 )
 
+type Wip func() []string
+
 type Echo struct {
 	RandomTLSExtension bool
 	HelloID            profiles.ClientProfile
@@ -175,13 +177,7 @@ func Ja3Helper(echo Echo, timeout int) OptionHelper {
 	}
 }
 
-func WarpI(ips ...string) func() []string {
-	return func() []string {
-		return ips
-	}
-}
-
-func NewSession(proxies string, fetchWithes func() []string, opts ...OptionHelper) (session *Session, err error) {
+func NewSession(proxies string, withes Wip, opts ...OptionHelper) (session *Session, err error) {
 	session = &Session{}
 	for _, exec := range opts {
 		if err = exec(proxies, session); err != nil {
@@ -189,17 +185,17 @@ func NewSession(proxies string, fetchWithes func() []string, opts ...OptionHelpe
 		}
 	}
 
-	if fetchWithes == nil {
-		fetchWithes = func() []string { return nil }
+	if withes == nil {
+		withes = func() (_ []string) { return }
 	}
 
-	c, err := client(proxies, fetchWithes, session.opts)
+	c, err := client(proxies, withes, session.opts)
 	if err != nil {
 		return
 	}
 	session.client = c
 
-	dialer, err := socket(proxies, fetchWithes, session.opts)
+	dialer, err := socket(proxies, withes, session.opts)
 	if err != nil {
 		return
 	}
@@ -298,11 +294,17 @@ func (c *Builder) JHeader() *Builder {
 }
 
 func (c *Builder) Header(key, value string) *Builder {
+	if key == "" {
+		return c
+	}
 	c.headers[key] = value
 	return c
 }
 
 func (c *Builder) Query(key, value string) *Builder {
+	if key == "" {
+		return c
+	}
 	c.query = append(c.query, fmt.Sprintf("%s=%s", key, value))
 	return c
 }
@@ -537,7 +539,7 @@ func (c *Builder) doJ() (*http.Response, error) {
 	return &r, err
 }
 
-func client(proxies string, fetchWithes func() []string, option *ConnectOption) (*http.Client, error) {
+func client(proxies string, withes Wip, option *ConnectOption) (*http.Client, error) {
 	c := http.DefaultClient
 
 	newTransport := func(t *http.Transport) http.RoundTripper {
@@ -578,7 +580,7 @@ func client(proxies string, fetchWithes func() []string, option *ConnectOption) 
 				Transport: newTransport(&http.Transport{
 					Proxy: func(r *http.Request) (*url.URL, error) {
 						if r.URL != nil {
-							for _, w := range fetchWithes() {
+							for _, w := range withes() {
 								if strings.HasPrefix(r.URL.Host, w) {
 									return r.URL, nil
 								}
@@ -602,7 +604,7 @@ func client(proxies string, fetchWithes func() []string, option *ConnectOption) 
 			c = &http.Client{
 				Transport: newTransport(&http.Transport{
 					DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-						for _, w := range fetchWithes() {
+						for _, w := range withes() {
 							if strings.HasPrefix(addr, w) {
 								return proxy.Direct.Dial(network, addr)
 							}
@@ -638,12 +640,12 @@ func ToObject(response *http.Response, obj interface{}) (err error) {
 		return
 	}
 
-	//encoding := response.Header.Get("Content-Encoding")
-	//if encoding != "" && response.Proto == "JA3" {
+	// encoding := response.Header.Get("Content-Encoding")
+	// if encoding != "" && response.Proto == "JA3" {
 	//	if IsEncoding(data, encoding) {
 	//		requests.DecompressBody(&data, encoding)
 	//	}
-	//}
+	// }
 
 	err = json.Unmarshal(data, obj)
 	return
@@ -770,20 +772,20 @@ func TextResponse(response *http.Response) (value string) {
 		return
 	}
 
-	//encoding := response.Header.Get("Content-Encoding")
-	//if encoding != "" && response.Proto == "JA3" {
+	// encoding := response.Header.Get("Content-Encoding")
+	// if encoding != "" && response.Proto == "JA3" {
 	//	if IsEncoding(bin, encoding) {
 	//		requests.DecompressBody(&bin, encoding)
 	//	}
-	//}
+	// }
 
 	return string(bin)
 }
 
-//func Decode(data *[]byte, encoding string) {
+// func Decode(data *[]byte, encoding string) {
 //	if encoding != "" && data != nil {
 //		if IsEncoding(*data, encoding) {
 //			requests.DecompressBody(data, encoding)
 //		}
 //	}
-//}
+// }
