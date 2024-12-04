@@ -12,6 +12,10 @@ func IsJSON(response *http.Response) error {
 }
 
 func IsTEXT(response *http.Response) error {
+	return ist(response, "Text", "text/plain")
+}
+
+func IsHTML(response *http.Response) error {
 	return ist(response, "Text", "text/html")
 }
 
