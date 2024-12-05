@@ -23,6 +23,10 @@ func IsSTREAM(response *http.Response) error {
 	return ist(response, "Stream", "text/event-stream", "application/stream")
 }
 
+func IsPROTO(response *http.Response) error {
+	return ist(response, "Proto", "application/connect+proto")
+}
+
 func Status(status int) func(response *http.Response) error {
 	return func(response *http.Response) error {
 		if response == nil {
