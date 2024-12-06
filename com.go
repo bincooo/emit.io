@@ -94,7 +94,7 @@ func IsEncoding(data []byte, encoding string) bool {
 	}
 }
 
-func decodeGZip(closer io.ReadCloser) (io.ReadCloser, error) {
+func DecodeGZip(closer io.ReadCloser) (io.ReadCloser, error) {
 	if closer == nil {
 		return closer, nil
 	}

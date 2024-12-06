@@ -431,7 +431,7 @@ func (c *Builder) Do() (*http.Response, error) {
 		switch encoding {
 		case "gzip":
 			if slices.Contains(c.encoding, "gzip") {
-				response.Body, err = decodeGZip(response.Body)
+				response.Body, err = DecodeGZip(response.Body)
 				if err != nil {
 					return response, Error{-1, "Do decoding/gzip", "", err}
 				}
