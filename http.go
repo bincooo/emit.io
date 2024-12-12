@@ -288,8 +288,15 @@ func (c *Builder) Option(opt *ConnectOption) *Builder {
 	return c
 }
 
-func (c *Builder) JHeader() *Builder {
-	c.headers["content-type"] = "application/json"
+func (c *Builder) JSONHeader() *Builder {
+	c.Header("content-type", "application/json")
+	return c
+}
+
+func (c *Builder) Headers(headers map[string]string) *Builder {
+	for k, v := range headers {
+		c.Header(k, v)
+	}
 	return c
 }
 
