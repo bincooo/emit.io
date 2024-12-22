@@ -20,7 +20,7 @@ func IsHTML(response *http.Response) error {
 }
 
 func IsSTREAM(response *http.Response) error {
-	return ist(response, "Stream", "text/event-stream", "application/stream")
+	return ist(response, "Stream", "text/event-stream", "application/stream", "application/proto")
 }
 
 func IsPROTO(response *http.Response) error {
