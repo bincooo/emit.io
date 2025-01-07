@@ -25,8 +25,6 @@ import (
 	"time"
 )
 
-type Wip func() []string
-
 type Echo struct {
 	RandomTLSExtension bool
 	HelloID            profiles.ClientProfile
@@ -63,14 +61,15 @@ type Builder struct {
 }
 
 type Session struct {
-	opts *ConnectOption
+	opts     *ConnectOption
+	redirect bool
 
 	client    *http.Client
 	tlsClient tls_client.HttpClient
 	dialer    *websocket.Dialer
 }
 
-type OptionHelper = func(string, *Session) error
+type OptionHelper = func(proxies string, redirect bool, session *Session) error
 
 type readCloser struct {
 	io.Reader
@@ -78,7 +77,7 @@ type readCloser struct {
 }
 
 func TLSHandshakeTimeoutHelper(timeout time.Duration) OptionHelper {
-	return func(_ string, session *Session) error {
+	return func(_ string, _ bool, session *Session) error {
 		if session.opts == nil {
 			session.opts = &ConnectOption{}
 		}
@@ -88,7 +87,7 @@ func TLSHandshakeTimeoutHelper(timeout time.Duration) OptionHelper {
 }
 
 func ResponseHeaderTimeoutHelper(timeout time.Duration) OptionHelper {
-	return func(_ string, session *Session) error {
+	return func(_ string, _ bool, session *Session) error {
 		if session.opts == nil {
 			session.opts = &ConnectOption{}
 		}
@@ -98,7 +97,7 @@ func ResponseHeaderTimeoutHelper(timeout time.Duration) OptionHelper {
 }
 
 func ExpectContinueTimeoutHelper(timeout time.Duration) OptionHelper {
-	return func(_ string, session *Session) error {
+	return func(_ string, _ bool, session *Session) error {
 		if session.opts == nil {
 			session.opts = &ConnectOption{}
 		}
@@ -108,7 +107,7 @@ func ExpectContinueTimeoutHelper(timeout time.Duration) OptionHelper {
 }
 
 func IdleConnTimeoutHelper(timeout time.Duration) OptionHelper {
-	return func(_ string, session *Session) error {
+	return func(_ string, _ bool, session *Session) error {
 		if session.opts == nil {
 			session.opts = &ConnectOption{}
 		}
@@ -118,7 +117,7 @@ func IdleConnTimeoutHelper(timeout time.Duration) OptionHelper {
 }
 
 func DisableKeepAliveHelper(flag bool) OptionHelper {
-	return func(_ string, session *Session) error {
+	return func(_ string, _ bool, session *Session) error {
 		if session.opts == nil {
 			session.opts = &ConnectOption{}
 		}
@@ -128,7 +127,7 @@ func DisableKeepAliveHelper(flag bool) OptionHelper {
 }
 
 func MaxIdleConnectsHelper(count int) OptionHelper {
-	return func(_ string, session *Session) error {
+	return func(_ string, _ bool, session *Session) error {
 		if session.opts == nil {
 			session.opts = &ConnectOption{}
 		}
@@ -138,7 +137,7 @@ func MaxIdleConnectsHelper(count int) OptionHelper {
 }
 
 func TLSConfigHelper(config *tls.Config) OptionHelper {
-	return func(_ string, session *Session) error {
+	return func(_ string, _ bool, session *Session) error {
 		if config == nil {
 			if session.opts == nil {
 				session.opts = &ConnectOption{}
@@ -150,13 +149,16 @@ func TLSConfigHelper(config *tls.Config) OptionHelper {
 }
 
 func Ja3Helper(echo Echo, timeout int) OptionHelper {
-	return func(proxies string, session *Session) error {
+	return func(proxies string, redirect bool, session *Session) error {
 		jar := tls_client.NewCookieJar()
 		options := []tls_client.HttpClientOption{
 			tls_client.WithTimeoutSeconds(timeout),
 			tls_client.WithClientProfile(echo.HelloID),
-			tls_client.WithNotFollowRedirects(),
 			tls_client.WithCookieJar(jar),
+		}
+
+		if !redirect {
+			options = append(options, tls_client.WithNotFollowRedirects())
 		}
 
 		if proxies != "" {
@@ -177,10 +179,10 @@ func Ja3Helper(echo Echo, timeout int) OptionHelper {
 	}
 }
 
-func NewSession(proxies string, withes Wip, opts ...OptionHelper) (session *Session, err error) {
+func NewSession(proxies string, redirect bool, withes func() []string, opts ...OptionHelper) (session *Session, err error) {
 	session = &Session{}
 	for _, exec := range opts {
-		if err = exec(proxies, session); err != nil {
+		if err = exec(proxies, redirect, session); err != nil {
 			return
 		}
 	}
@@ -189,7 +191,7 @@ func NewSession(proxies string, withes Wip, opts ...OptionHelper) (session *Sess
 		withes = func() (_ []string) { return }
 	}
 
-	c, err := client(proxies, withes, session.opts)
+	c, err := client(proxies, redirect, withes, session.opts)
 	if err != nil {
 		return
 	}
@@ -201,6 +203,25 @@ func NewSession(proxies string, withes Wip, opts ...OptionHelper) (session *Sess
 	}
 	session.dialer = dialer
 
+	if session.tlsClient == nil {
+		jar := tls_client.NewCookieJar()
+		options := []tls_client.HttpClientOption{
+			tls_client.WithCookieJar(jar),
+		}
+
+		if !redirect {
+			options = append(options, tls_client.WithNotFollowRedirects())
+		}
+
+		if proxies != "" {
+			options = append(options, tls_client.WithProxyUrl(proxies))
+		}
+
+		session.tlsClient, err = tls_client.NewHttpClient(tls_client.NewNoopLogger(), options...)
+		if err != nil {
+			return
+		}
+	}
 	return
 }
 
@@ -390,7 +411,7 @@ func (c *Builder) Do() (*http.Response, error) {
 	if c.session != nil && c.session.client != nil {
 		session = c.session.client
 	} else {
-		cli, err := client(c.proxies, c.fetchWithes, c.option)
+		cli, err := client(c.proxies, c.session.redirect, c.fetchWithes, c.option)
 		if err != nil {
 			return nil, Error{-1, "Do", "", err}
 		}
@@ -546,7 +567,7 @@ func (c *Builder) doJ() (*http.Response, error) {
 	return &r, err
 }
 
-func client(proxies string, withes Wip, option *ConnectOption) (*http.Client, error) {
+func client(proxies string, redirect bool, withes func() []string, option *ConnectOption) (*http.Client, error) {
 	c := http.DefaultClient
 
 	newTransport := func(t *http.Transport) http.RoundTripper {
@@ -635,6 +656,13 @@ func client(proxies string, withes Wip, option *ConnectOption) (*http.Client, er
 		}
 	} else if c.Transport == nil {
 		c.Transport = newTransport(nil)
+	}
+
+	if !redirect {
+		c.CheckRedirect = func(req *http.Request, via []*http.Request) (err error) {
+			err = http.ErrUseLastResponse
+			return
+		}
 	}
 
 	return c, nil
