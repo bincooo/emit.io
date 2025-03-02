@@ -7,8 +7,14 @@ import (
 	"testing"
 )
 
+func WarpI(ips ...string) func() []string {
+	return func() []string {
+		return ips
+	}
+}
+
 func TestJa3(t *testing.T) {
-	session, err := NewSession(proxies, nil, Ja3Helper(
+	session, err := NewSession(proxies, false, nil, Ja3Helper(
 		Echo{true, profiles.CloudflareCustom},
 		120,
 	))
@@ -42,7 +48,7 @@ func TestJa3(t *testing.T) {
 }
 
 func TestHttp(t *testing.T) {
-	session, err := NewSession(proxies, WarpI("127.0.0.1"))
+	session, err := NewSession(proxies, false, WarpI("127.0.0.1"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +74,7 @@ func TestHttp(t *testing.T) {
 }
 
 func TestEncoding(t *testing.T) {
-	session, err := NewSession(proxies, WarpI("127.0.0.1"))
+	session, err := NewSession(proxies, false, WarpI("127.0.0.1"))
 	if err != nil {
 		t.Fatal(err)
 	}

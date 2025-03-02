@@ -24,7 +24,7 @@ func TestRandIP(t *testing.T) {
 }
 
 func TestHTTP(t *testing.T) {
-	session, err := NewSession(proxies, nil, Ja3Helper(
+	session, err := NewSession(proxies, false, nil, Ja3Helper(
 		Echo{false, profiles.Chrome_124},
 		180,
 	))
@@ -70,7 +70,7 @@ func TestClaude3Haiku20240307(t *testing.T) {
 		},
 	}
 
-	session, err := NewSession(proxies, nil, IdleConnTimeoutHelper(10*time.Second))
+	session, err := NewSession(proxies, false, nil, IdleConnTimeoutHelper(10*time.Second))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestClaude3Haiku20240307(t *testing.T) {
 		Header("Referer", "https://chat.lmsys.org/").
 		Header("User-Agent", userAgent).
 		Header("cookie", cookie).
-		JHeader().
+		JSONHeader().
 		Body(obj).
 		DoS(http.StatusOK)
 	if err != nil {
@@ -153,7 +153,7 @@ func TestClaude3Haiku20240307(t *testing.T) {
 				Header("Referer", "https://chat.lmsys.org/").
 				Header("User-Agent", userAgent).
 				Header("Cookie", cookie).
-				JHeader().
+				JSONHeader().
 				Body(obj).
 				DoS(http.StatusOK)
 			if err != nil {
@@ -217,7 +217,7 @@ func TestClaude3Haiku20240307(t *testing.T) {
 func TestGioSDXL(t *testing.T) {
 	p := "1girl"
 	n := ""
-	session, err := NewSession(proxies, nil)
+	session, err := NewSession(proxies, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +323,7 @@ label:
 func TestAPI(t *testing.T) {
 	response, err := ClientBuilder(nil).
 		POST("http://127.0.0.1:8000/chat").
-		JHeader().
+		JSONHeader().
 		Body(map[string]interface{}{
 			"previousMessages": make([]string, 0),
 			"message":          "帮我打开计算器",
